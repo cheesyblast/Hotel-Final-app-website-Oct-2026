@@ -425,19 +425,26 @@ Build a comprehensive hotel management system for managing rooms, bookings, cust
 - [x] Notify.lk SMS Gateway - User Configurable (COMPLETED - 2026-02-08)
 - [x] Custom Tax Calculation in Bookings (COMPLETED - 2026-02-08)
 - [x] Payroll Processing with PayrollSettings (COMPLETED - 2026-02-08)
+- [x] SMS/Email Notification System (COMPLETED - 2026-02-08)
+- [x] Country searchable dropdown in booking form (COMPLETED - 2026-02-23)
+- [x] Channel Manager API Settings page (COMPLETED - 2026-02-23)
+- [x] Booking Calendar View like Booking.com (COMPLETED - 2026-02-23)
+- [x] Reports PDF Export with Excel option (COMPLETED - 2026-02-23)
 
 ### P1 - Upcoming Tasks
 - [ ] Export commission reports to PDF (CSV done)
-- [ ] Automated email/SMS sending using templates on events (check-in, checkout, cleaning assignment)
 - [ ] User verification of previously completed features
 - [ ] Make application mobile responsive (starting with Restaurant component)
+- [ ] Implement actual API sync with Booking.com/Expedia/Agoda (when API keys provided)
+- [ ] Complete Brevo email integration (triggers exist, actual sending is placeholder)
 
 ### P2 - Future Enhancements
 - [ ] Guest feedback/review system
 - [ ] Email notifications for commission due dates
 - [ ] Advanced reporting and analytics
-- [ ] Refactor App.js into smaller components (11,000+ lines)
-- [ ] Refactor server.py into smaller routers (6,500+ lines)
+- [ ] Refactor App.js into smaller components (13,000+ lines)
+- [ ] Refactor server.py into smaller routers (7,000+ lines)
+- [ ] Notification logs viewer in Settings
 
 ---
 
