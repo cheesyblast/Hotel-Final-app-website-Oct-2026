@@ -71,7 +71,7 @@ const AuthProvider = ({ children }) => {
   const [isSetupCompleted, setIsSetupCompleted] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
 
-  // Set axios default authorization header
+  // Set axios default authorization header and setup interceptor
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -79,6 +79,33 @@ const AuthProvider = ({ children }) => {
       delete axios.defaults.headers.common['Authorization'];
     }
   }, [token]);
+
+  // Setup axios response interceptor to handle auth errors
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // Handle 401 Unauthorized errors
+        if (error.response?.status === 401) {
+          console.log('Session expired or unauthorized - logging out');
+          // Clear token and redirect to login
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
+          // Show user-friendly message
+          if (error.config?.url && !error.config.url.includes('/auth/login')) {
+            alert('Your session has expired. Please log in again.');
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on unmount
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
 
   // Check setup status on app load
   useEffect(() => {
