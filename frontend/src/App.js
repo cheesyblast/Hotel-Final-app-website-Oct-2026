@@ -5777,6 +5777,8 @@ const Guests = () => {
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [guestsPerPage] = useState(20);
   const [smsData, setSmsData] = useState({
     phone_number: '',
     message: '',
@@ -5823,7 +5825,15 @@ const Guests = () => {
       });
       setFilteredGuests(filtered);
     }
+    // Reset to first page when search changes
+    setCurrentPage(1);
   }, [guests, searchQuery]);
+
+  // Pagination logic
+  const indexOfLastGuest = currentPage * guestsPerPage;
+  const indexOfFirstGuest = indexOfLastGuest - guestsPerPage;
+  const currentGuests = filteredGuests.slice(indexOfFirstGuest, indexOfLastGuest);
+  const totalPages = Math.ceil(filteredGuests.length / guestsPerPage);
 
   const fetchGuests = async () => {
     try {
