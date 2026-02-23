@@ -6169,6 +6169,47 @@ async def init_default_sms_templates():
     
     return {"message": f"Created {created} default SMS templates"}
 
+# ==================== CHANNEL API SETTINGS ENDPOINTS ====================
+
+@api_router.get("/channel-api-settings")
+async def get_channel_api_settings(current_user: UserResponse = Depends(get_current_user)):
+    """Get channel API settings for OTA integrations"""
+    settings = await db.channel_api_settings.find_one({}, {"_id": 0})
+    if not settings:
+        # Return default empty settings
+        return ChannelApiSettings().dict()
+    return settings
+
+@api_router.put("/channel-api-settings")
+async def update_channel_api_settings(
+    settings: ChannelApiSettingsUpdate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update channel API settings"""
+    existing = await db.channel_api_settings.find_one()
+    
+    update_data = {k: v for k, v in settings.dict().items() if v is not None}
+    update_data["updated_at"] = datetime.utcnow()
+    
+    if existing:
+        await db.channel_api_settings.update_one({}, {"$set": update_data})
+    else:
+        new_settings = ChannelApiSettings(**update_data)
+        await db.channel_api_settings.insert_one(new_settings.dict())
+    
+    # Log the activity
+    await db.activity_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "action": "channel_api_settings_updated",
+        "entity_type": "settings",
+        "details": "Channel API integration settings updated",
+        "timestamp": datetime.utcnow()
+    })
+    
+    return {"message": "Channel API settings updated successfully"}
+
 # ==================== CUSTOM MESSAGING ENDPOINTS ====================
 
 class CustomSMSRequest(BaseModel):
