@@ -4078,7 +4078,11 @@ const CalendarView = () => {
         <span className="text-gray-400 text-sm">Legend:</span>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-blue-600 rounded"></div>
-          <span className="text-gray-300 text-sm">Has Bookings</span>
+          <span className="text-gray-300 text-sm">Booked</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-600 rounded"></div>
+          <span className="text-gray-300 text-sm">Cancelled</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-amber-500 rounded"></div>
