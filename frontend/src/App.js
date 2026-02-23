@@ -7705,7 +7705,7 @@ const Navigation = () => {
             )}
           </div>
 
-          {navItems.slice(5).map((item) => (
+          {navItems.slice(6).map((item) => (
             <Link 
               key={item.path}
               to={item.path} 
@@ -7775,7 +7775,7 @@ const Navigation = () => {
                 ))}
               </div>
               
-              {navItems.slice(5).map((item) => (
+              {navItems.slice(6).map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
