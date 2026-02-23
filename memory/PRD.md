@@ -33,6 +33,57 @@ Build a comprehensive hotel management system for managing rooms, bookings, cust
 
 ## Changelog
 
+### 2026-02-23 - Calendar View, Country Dropdown, Channel API, Reports PDF
+**Features Implemented**:
+
+1. **Country Searchable Dropdown in Booking Form**
+   - Replaced text input with HTML5 datalist for browser-native autocomplete
+   - 195 countries pre-loaded in dropdown
+   - Type to search functionality with helper text
+   - Location: Dashboard > New Booking modal > Country field
+
+2. **Booking Calendar View (like Booking.com)**
+   - New "Calendar" menu item after Dashboard in navigation
+   - Monthly calendar showing booking counts per day
+   - Color coding: Blue (has bookings), Amber (sold out), Gray (available)
+   - Previous/Next month navigation buttons
+   - Click on any date opens modal with:
+     - Booking list for that date
+     - Guest name, booking ID, room number, dates, amount, status
+     - Booking source tag (Direct/Booking.com/Expedia/Agoda)
+     - Rooms left to sell indicator
+   - Legend showing booking status colors
+
+3. **Channel Manager API Settings**
+   - New "Channel API" tab in Settings
+   - Three OTA sections: Booking.com, Expedia, Agoda
+   - Each section has: API Key, Property ID fields with Enable checkbox
+   - Branded colors: Blue (Booking.com), Yellow (Expedia), Red (Agoda)
+   - Save button persists settings to MongoDB
+   - Ready for future API integration when keys provided
+
+4. **Reports PDF Export**
+   - Added dropdown menus for Daily Report and Monthly Report buttons
+   - Each dropdown shows: Excel (.xlsx) and PDF (.pdf) options
+   - PDF uses jspdf and jspdf-autotable libraries
+   - PDF includes: Summary table, Income details, Expense details (multi-page)
+   - Professional formatting with color-coded headers
+
+**API Endpoints Added**:
+- `GET /api/channel-api-settings` - Get Channel API settings
+- `PUT /api/channel-api-settings` - Update Channel API settings
+
+**Models Added**:
+- `ChannelApiSettings` - Stores Booking.com, Expedia, Agoda API credentials
+
+**Files Modified**:
+- `/app/frontend/src/App.js`: Added CalendarView component, country dropdown with datalist, Channel API settings tab, PDF export functions
+- `/app/backend/server.py`: Added ChannelApiSettings model and CRUD endpoints
+
+**Tests**: All 9 backend tests pass, 7 frontend features verified - `/app/test_reports/iteration_7.json`
+
+---
+
 ### 2026-02-08 - SMS/Email Notification System Complete
 **Features Implemented**:
 
