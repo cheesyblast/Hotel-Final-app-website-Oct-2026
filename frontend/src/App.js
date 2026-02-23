@@ -12809,6 +12809,211 @@ const Settings = () => {
         </div>
       )}
 
+      {/* Channel API Settings Tab */}
+      {activeTab === 'channel-api' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                🔗 Channel Manager API Integration
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Configure API credentials for automatic booking synchronization with OTAs.
+                When you obtain API keys from these platforms, enter them here for automatic updates.
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              {/* Booking.com Integration */}
+              <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-6 bg-blue-50 dark:bg-blue-900/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">B</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-blue-800 dark:text-blue-200">Booking.com</h3>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">Connectivity Partner API</p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={channelApiSettings.booking_com_enabled}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, booking_com_enabled: e.target.checked})}
+                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-blue-700 dark:text-blue-300">Enable</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={channelApiSettings.booking_com_api_key}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, booking_com_api_key: e.target.value})}
+                      className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Booking.com API Key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">Property ID</label>
+                    <input
+                      type="text"
+                      value={channelApiSettings.booking_com_property_id}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, booking_com_property_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-blue-300 dark:border-blue-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Property ID"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                  Get your API credentials from the Booking.com Partner Portal
+                </p>
+              </div>
+
+              {/* Expedia Integration */}
+              <div className="border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 bg-yellow-50 dark:bg-yellow-900/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">E</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-yellow-800 dark:text-yellow-200">Expedia</h3>
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400">Partner Central API</p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={channelApiSettings.expedia_enabled}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, expedia_enabled: e.target.checked})}
+                      className="w-5 h-5 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                    />
+                    <span className="text-sm text-yellow-700 dark:text-yellow-300">Enable</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-yellow-700 dark:text-yellow-300 mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={channelApiSettings.expedia_api_key}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, expedia_api_key: e.target.value})}
+                      className="w-full px-3 py-2 border border-yellow-300 dark:border-yellow-600 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Expedia API Key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-yellow-700 dark:text-yellow-300 mb-1">Property ID</label>
+                    <input
+                      type="text"
+                      value={channelApiSettings.expedia_property_id}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, expedia_property_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-yellow-300 dark:border-yellow-600 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Property ID"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                  Get your API credentials from Expedia Partner Central
+                </p>
+              </div>
+
+              {/* Agoda Integration */}
+              <div className="border border-red-200 dark:border-red-800 rounded-lg p-6 bg-red-50 dark:bg-red-900/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">A</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-red-800 dark:text-red-200">Agoda</h3>
+                      <p className="text-xs text-red-600 dark:text-red-400">YCS API Integration</p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={channelApiSettings.agoda_enabled}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, agoda_enabled: e.target.checked})}
+                      className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-red-700 dark:text-red-300">Enable</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-red-700 dark:text-red-300 mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={channelApiSettings.agoda_api_key}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, agoda_api_key: e.target.value})}
+                      className="w-full px-3 py-2 border border-red-300 dark:border-red-600 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Agoda API Key"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-red-700 dark:text-red-300 mb-1">Property ID</label>
+                    <input
+                      type="text"
+                      value={channelApiSettings.agoda_property_id}
+                      onChange={(e) => setChannelApiSettings({...channelApiSettings, agoda_property_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-red-300 dark:border-red-600 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter Property ID"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                  Get your API credentials from Agoda YCS (Yield Control System)
+                </p>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={handleSaveChannelApiSettings}
+                disabled={savingChannelApi}
+                className="bg-cyan-600 text-white px-6 py-3 rounded-lg hover:bg-cyan-700 disabled:bg-gray-400 font-medium transition-colors flex items-center gap-2"
+                data-testid="save-channel-api-settings"
+              >
+                {savingChannelApi ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    💾 Save API Settings
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Info Notice */}
+            <div className="mt-6 bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-blue-500 text-xl">ℹ️</span>
+                <div>
+                  <h4 className="font-medium text-gray-800 dark:text-gray-200">How it works</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Once you enter valid API credentials and enable the integration, the system will automatically sync 
+                    booking data from these platforms. New bookings from Booking.com, Expedia, or Agoda will appear in 
+                    your calendar and bookings list with their respective source tags.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* System Management Tab - Admin Only */}
       {activeTab === 'system' && user?.role === 'Admin' && (
         <div className="space-y-6">
