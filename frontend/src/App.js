@@ -4211,18 +4211,28 @@ const CalendarView = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {selectedDateBookings.map((booking, index) => (
-                    <div key={booking.id || index} className="border border-gray-700 rounded-lg overflow-hidden">
+                  {selectedDateBookings.map((booking, index) => {
+                    const isCancelled = booking.status === 'Cancelled';
+                    return (
+                    <div key={booking.id || index} className={`border rounded-lg overflow-hidden ${isCancelled ? 'border-red-700' : 'border-gray-700'}`}>
                       {/* Booking Header - Always visible */}
                       <div
                         onClick={() => setExpandedBooking(expandedBooking === booking.id ? null : booking.id)}
-                        className="bg-gray-750 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-gray-700"
+                        className={`px-4 py-3 flex justify-between items-center cursor-pointer ${isCancelled ? 'bg-red-900/30 hover:bg-red-900/50' : 'bg-gray-750 hover:bg-gray-700'}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold text-white">{booking.guest_name}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${getBookingSourceColor(booking.booking_channel_name)}`}>
-                            {booking.booking_channel_name || 'Direct'}
-                          </span>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-semibold ${isCancelled ? 'text-red-300' : 'text-white'}`}>{booking.guest_name}</span>
+                            {isCancelled && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-red-600 text-white">CANCELLED</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="bg-gray-600 text-gray-200 px-2 py-0.5 rounded">Room {booking.room_number}</span>
+                            <span className={`px-2 py-0.5 rounded ${getBookingSourceColor(booking.booking_channel_name)}`}>
+                              {booking.booking_channel_name || 'Direct'}
+                            </span>
+                          </div>
                         </div>
                         <svg 
                           className={`w-5 h-5 text-gray-400 transform transition-transform ${expandedBooking === booking.id ? 'rotate-180' : ''}`} 
@@ -4236,7 +4246,7 @@ const CalendarView = () => {
 
                       {/* Expanded Details */}
                       {expandedBooking === booking.id && (
-                        <div className="px-4 py-3 bg-gray-800 border-t border-gray-700 space-y-3">
+                        <div className={`px-4 py-3 border-t space-y-3 ${isCancelled ? 'bg-red-900/20 border-red-700' : 'bg-gray-800 border-gray-700'}`}>
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
                               <p className="text-gray-500">Booking ID</p>
@@ -4244,7 +4254,7 @@ const CalendarView = () => {
                             </div>
                             <div>
                               <p className="text-gray-500">Room</p>
-                              <p className="text-white">{booking.room_number}</p>
+                              <p className="text-white font-semibold">{booking.room_number}</p>
                             </div>
                           </div>
 
@@ -4266,13 +4276,14 @@ const CalendarView = () => {
                             </div>
                             <div>
                               <p className="text-gray-500">Amount</p>
-                              <p className="text-green-400 font-semibold">LKR {booking.booking_amount?.toLocaleString() || '0'}</p>
+                              <p className={`font-semibold ${isCancelled ? 'text-red-400 line-through' : 'text-green-400'}`}>LKR {booking.booking_amount?.toLocaleString() || '0'}</p>
                             </div>
                           </div>
 
                           <div className="text-sm">
                             <p className="text-gray-500">Status</p>
                             <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                              booking.status === 'Cancelled' ? 'bg-red-900 text-red-300' :
                               booking.status === 'Checked In' || booking.status === 'Checked-in' ? 'bg-green-900 text-green-300' :
                               booking.status === 'Upcoming' ? 'bg-blue-900 text-blue-300' :
                               booking.status === 'Completed' ? 'bg-gray-700 text-gray-300' :
