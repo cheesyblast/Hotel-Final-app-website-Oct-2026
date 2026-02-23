@@ -4398,6 +4398,201 @@ const Reports = () => {
     }
   };
 
+  // PDF Export Functions
+  const handleDownloadDailyPDF = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await axios.get(`${API}/financial-reports/daily?date=${today}`);
+      const reportData = response.data;
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(33, 37, 41);
+      doc.text('Daily Financial Report', pageWidth / 2, 20, { align: 'center' });
+      
+      // Date
+      doc.setFontSize(12);
+      doc.setTextColor(100);
+      doc.text(`Date: ${reportData.date}`, pageWidth / 2, 30, { align: 'center' });
+      
+      // Summary Section
+      doc.setFontSize(14);
+      doc.setTextColor(33, 37, 41);
+      doc.text('Financial Summary', 14, 45);
+      
+      // Summary Table
+      doc.autoTable({
+        startY: 50,
+        head: [['Category', 'Amount (LKR)']],
+        body: [
+          ['Cash Income', reportData.summary["Cash Income (LKR)"]?.toLocaleString() || '0'],
+          ['Bank Income', reportData.summary["Bank Income (LKR)"]?.toLocaleString() || '0'],
+          ['Total Income', reportData.summary["Total Income (LKR)"]?.toLocaleString() || '0'],
+          ['Cash Expenses', reportData.summary["Cash Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Bank Expenses', reportData.summary["Bank Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Total Expenses', reportData.summary["Total Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Net Cash Balance', reportData.cash_balance?.toLocaleString() || '0'],
+          ['Net Bank Balance', reportData.bank_balance?.toLocaleString() || '0'],
+          ['Total Net Balance', reportData.total_balance?.toLocaleString() || '0'],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] },
+        styles: { fontSize: 10 }
+      });
+      
+      // Income Details
+      if (reportData.income_details && reportData.income_details.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Income Details', 14, 20);
+        
+        doc.autoTable({
+          startY: 25,
+          head: [['Date', 'Guest', 'Category', 'Amount', 'Method']],
+          body: reportData.income_details.map(item => [
+            item.Date || '',
+            item['Guest Name'] || '',
+            item.Category || '',
+            item.Amount?.toLocaleString() || '0',
+            item['Payment Method'] || ''
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [34, 197, 94] },
+          styles: { fontSize: 8 }
+        });
+      }
+      
+      // Expense Details
+      if (reportData.expense_details && reportData.expense_details.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Expense Details', 14, 20);
+        
+        doc.autoTable({
+          startY: 25,
+          head: [['Date', 'Category', 'Description', 'Amount', 'Method']],
+          body: reportData.expense_details.map(item => [
+            item.Date || '',
+            item.Category || '',
+            item.Description || '',
+            item.Amount?.toLocaleString() || '0',
+            item['Payment Method'] || ''
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [239, 68, 68] },
+          styles: { fontSize: 8 }
+        });
+      }
+      
+      doc.save(`Daily_Financial_Report_${reportData.date}.pdf`);
+    } catch (error) {
+      console.error('Error downloading daily PDF report:', error);
+      alert('Error downloading daily PDF report: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleDownloadMonthlyPDF = async () => {
+    try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth() + 1;
+      
+      const response = await axios.get(`${API}/financial-reports/monthly?year=${year}&month=${month}`);
+      const reportData = response.data;
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(33, 37, 41);
+      doc.text('Monthly Financial Report', pageWidth / 2, 20, { align: 'center' });
+      
+      // Month
+      doc.setFontSize(12);
+      doc.setTextColor(100);
+      doc.text(`Month: ${reportData.month}`, pageWidth / 2, 30, { align: 'center' });
+      
+      // Summary Section
+      doc.setFontSize(14);
+      doc.setTextColor(33, 37, 41);
+      doc.text('Financial Summary', 14, 45);
+      
+      // Summary Table
+      doc.autoTable({
+        startY: 50,
+        head: [['Category', 'Amount (LKR)']],
+        body: [
+          ['Cash Income', reportData.summary["Cash Income (LKR)"]?.toLocaleString() || '0'],
+          ['Bank Income', reportData.summary["Bank Income (LKR)"]?.toLocaleString() || '0'],
+          ['Total Income', reportData.summary["Total Income (LKR)"]?.toLocaleString() || '0'],
+          ['Cash Expenses', reportData.summary["Cash Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Bank Expenses', reportData.summary["Bank Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Total Expenses', reportData.summary["Total Expenses (LKR)"]?.toLocaleString() || '0'],
+          ['Net Cash Balance', reportData.cash_balance?.toLocaleString() || '0'],
+          ['Net Bank Balance', reportData.bank_balance?.toLocaleString() || '0'],
+          ['Total Net Balance', reportData.total_balance?.toLocaleString() || '0'],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [139, 92, 246] },
+        styles: { fontSize: 10 }
+      });
+      
+      // Income Details
+      if (reportData.income_details && reportData.income_details.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Income Details', 14, 20);
+        
+        doc.autoTable({
+          startY: 25,
+          head: [['Date', 'Guest', 'Category', 'Amount', 'Method']],
+          body: reportData.income_details.map(item => [
+            item.Date || '',
+            item['Guest Name'] || '',
+            item.Category || '',
+            item.Amount?.toLocaleString() || '0',
+            item['Payment Method'] || ''
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [34, 197, 94] },
+          styles: { fontSize: 8 }
+        });
+      }
+      
+      // Expense Details
+      if (reportData.expense_details && reportData.expense_details.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Expense Details', 14, 20);
+        
+        doc.autoTable({
+          startY: 25,
+          head: [['Date', 'Category', 'Description', 'Amount', 'Method']],
+          body: reportData.expense_details.map(item => [
+            item.Date || '',
+            item.Category || '',
+            item.Description || '',
+            item.Amount?.toLocaleString() || '0',
+            item['Payment Method'] || ''
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [239, 68, 68] },
+          styles: { fontSize: 8 }
+        });
+      }
+      
+      const monthName = reportData.month.replace(' ', '_');
+      doc.save(`Monthly_Financial_Report_${monthName}.pdf`);
+    } catch (error) {
+      console.error('Error downloading monthly PDF report:', error);
+      alert('Error downloading monthly PDF report: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
   const fetchReportsData = async () => {
     try {
       const [dailyResponse, monthlyResponse, comparisonResponse] = await Promise.all([
