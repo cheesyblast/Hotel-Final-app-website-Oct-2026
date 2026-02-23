@@ -10716,7 +10716,8 @@ const Settings = () => {
         fetchBookingChannels(),
         fetchPayrollSettings(),
         fetchActivityLogs(),
-        fetchTaxConfigs()
+        fetchTaxConfigs(),
+        fetchChannelApiSettings()
       ]);
     } catch (error) {
       console.error('Error fetching settings data:', error);
