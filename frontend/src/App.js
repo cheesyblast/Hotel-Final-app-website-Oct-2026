@@ -8748,12 +8748,12 @@ const Restaurant = () => {
 
       {/* POS Style Order Interface */}
       {showOrderModal && (
-        <div className="fixed inset-0 bg-gray-900 z-50 flex">
+        <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col md:flex-row">
           {/* Left Panel - Menu Items */}
-          <div className="w-2/3 bg-gray-800 p-4 overflow-y-auto">
+          <div className="flex-1 md:w-2/3 bg-gray-800 p-3 md:p-4 overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Menu</h2>
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-bold text-white">Menu</h2>
               <button
                 onClick={() => {
                   setShowOrderModal(false);
@@ -8763,14 +8763,14 @@ const Restaurant = () => {
                   });
                   setOrderItems([]);
                 }}
-                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                className="bg-red-500 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg hover:bg-red-600 transition-colors text-sm md:text-base"
               >
                 ✕ Close
               </button>
             </div>
 
-            {/* Order Type Selection */}
-            <div className="mb-6">
+            {/* Order Type Selection - Mobile Optimized */}
+            <div className="mb-4 md:mb-6">
               <div className="flex space-x-2">
                 <button
                   onClick={() => {
@@ -8779,7 +8779,7 @@ const Restaurant = () => {
                     }
                   }}
                   disabled={orderItems.length > 0 && newOrder.order_type !== 'table'}
-                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                  className={`flex-1 md:flex-none px-3 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors text-sm md:text-base ${
                     newOrder.order_type === 'table' 
                       ? 'bg-blue-600 text-white' 
                       : orderItems.length > 0 
@@ -8788,7 +8788,7 @@ const Restaurant = () => {
                   }`}
                   title={orderItems.length > 0 && newOrder.order_type !== 'table' ? 'Remove items from cart to switch order type' : ''}
                 >
-                  Table Order
+                  Table
                 </button>
                 <button
                   onClick={() => {
@@ -8797,7 +8797,7 @@ const Restaurant = () => {
                     }
                   }}
                   disabled={orderItems.length > 0 && newOrder.order_type !== 'room_service'}
-                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                  className={`flex-1 md:flex-none px-3 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors text-sm md:text-base ${
                     newOrder.order_type === 'room_service' 
                       ? 'bg-blue-600 text-white' 
                       : orderItems.length > 0 
@@ -8811,28 +8811,28 @@ const Restaurant = () => {
               </div>
               {orderItems.length > 0 && (
                 <p className="text-xs text-yellow-400 mt-2">
-                  ⚠️ Clear cart items to switch between Table Order and Room Service
+                  ⚠️ Clear cart to switch order type
                 </p>
               )}
             </div>
 
-            {/* Table/Room Selection */}
+            {/* Table/Room Selection - Mobile Optimized */}
             {newOrder.order_type === 'table' && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3 text-white">Select Table</h3>
-                <div className="grid grid-cols-4 gap-3">
+              <div className="mb-4 md:mb-6">
+                <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 text-white">Select Table</h3>
+                <div className="grid grid-cols-3 md:grid-cols-4 gap-2 md:gap-3">
                   {tables.filter(table => table.status === 'Available').map(table => (
                     <button
                       key={table.id}
                       onClick={() => setNewOrder({...newOrder, table_id: table.id})}
-                      className={`p-4 rounded-lg text-center transition-colors ${
+                      className={`p-2 md:p-4 rounded-lg text-center transition-colors ${
                         newOrder.table_id === table.id
                           ? 'bg-green-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'
                       }`}
                     >
-                      <div className="font-bold text-lg">T{table.table_number}</div>
-                      <div className="text-sm">{table.capacity} seats</div>
+                      <div className="font-bold text-sm md:text-lg">T{table.table_number}</div>
+                      <div className="text-xs md:text-sm">{table.capacity} seats</div>
                     </button>
                   ))}
                 </div>
@@ -8840,9 +8840,9 @@ const Restaurant = () => {
             )}
 
             {newOrder.order_type === 'room_service' && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3 text-white">Select Room (Live Check-in)</h3>
-                <div className="grid grid-cols-3 gap-3">
+              <div className="mb-4 md:mb-6">
+                <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 text-white">Select Room</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
                   {checkedInCustomers.map(customer => (
                     <button
                       key={customer.id}
@@ -8851,31 +8851,29 @@ const Restaurant = () => {
                         room_number: customer.current_room, 
                         customer_name: customer.name
                       })}
-                      className={`p-4 rounded-lg text-left transition-colors ${
+                      className={`p-2 md:p-4 rounded-lg text-left transition-colors ${
                         newOrder.room_number === customer.current_room
                           ? 'bg-green-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'
                       }`}
                     >
-                      <div className="font-bold text-lg">Room {customer.current_room}</div>
-                      <div className="text-sm">{customer.name}</div>
-                      <div className="text-xs text-green-400">
-                        ● Live Check-in
-                      </div>
+                      <div className="font-bold text-sm md:text-lg">Room {customer.current_room}</div>
+                      <div className="text-xs md:text-sm truncate">{customer.name}</div>
+                      <div className="text-xs text-green-400">● Live</div>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Menu Categories */}
-            <div className="space-y-6">
+            {/* Menu Categories - Mobile Optimized */}
+            <div className="space-y-4 md:space-y-6">
               {categories.map(category => (
-                <div key={category.id} className="bg-gray-700 rounded-lg p-4 shadow-sm">
-                  <h3 className="text-xl font-semibold text-white mb-4 border-b border-gray-600 pb-2">
+                <div key={category.id} className="bg-gray-700 rounded-lg p-3 md:p-4 shadow-sm">
+                  <h3 className="text-lg md:text-xl font-semibold text-white mb-3 md:mb-4 border-b border-gray-600 pb-2">
                     {category.name}
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
                     {menuItems.filter(item => item.category_id === category.id).map(item => (
                       <button
                         key={item.id}
@@ -8886,18 +8884,18 @@ const Restaurant = () => {
                           <img 
                             src={item.image} 
                             alt={item.name}
-                            className="w-full h-32 object-cover rounded-t-lg"
+                            className="w-full h-20 md:h-32 object-cover rounded-t-lg"
                           />
                         )}
-                        <div className="p-4">
-                          <div className="font-medium text-white">{item.name}</div>
-                          <div className="text-sm text-gray-300 mt-1">{item.description}</div>
-                          <div className="text-lg font-bold text-blue-400 mt-2">
+                        <div className="p-2 md:p-4">
+                          <div className="font-medium text-white text-sm md:text-base">{item.name}</div>
+                          <div className="text-xs md:text-sm text-gray-300 mt-1 line-clamp-2">{item.description}</div>
+                          <div className="text-sm md:text-lg font-bold text-blue-400 mt-1 md:mt-2">
                             LKR {item.price}
                           </div>
-                          <div className="flex items-center space-x-2 mt-2">
+                          <div className="flex items-center space-x-1 md:space-x-2 mt-1 md:mt-2">
                             {item.is_vegetarian && (
-                              <span className="bg-green-600 text-green-100 px-2 py-1 rounded text-xs">Veg</span>
+                              <span className="bg-green-600 text-green-100 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-xs">Veg</span>
                             )}
                             {item.is_spicy && (
                               <span className="bg-red-600 text-red-100 px-2 py-1 rounded text-xs">Spicy</span>
