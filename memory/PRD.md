@@ -33,6 +33,44 @@ Build a comprehensive hotel management system for managing rooms, bookings, cust
 
 ## Changelog
 
+### 2026-02-23 - UI/UX Improvements Phase 2
+**Features Implemented**:
+
+1. **Restaurant Mobile Optimization**
+   - New Order modal now uses `flex-col md:flex-row` for mobile-first responsive layout
+   - Table/Room Service buttons adjust sizing on mobile
+   - Menu items grid adjusts from 2 columns (mobile) to 3 columns (desktop)
+   - Order Summary panel slides below menu on mobile
+
+2. **Guests Page Improvements**
+   - Pagination: Shows 20 guests per page with Previous/Next navigation
+   - Removed "Completed Stays" column (not needed)
+   - Fixed "Last Stay" column text color from black to white
+   - Columns: Guest Name, Email, Phone, Total Bookings, Upcoming Bookings, Last Stay, Actions
+
+3. **Check-in Modal Booking Amount Display**
+   - Added "Booking Amount" summary section with blue background
+   - Shows: Rate per Night, Total Room Charges
+   - Shows commission amount if booking is from OTA channel
+   - Helps verify amount before completing check-in
+
+4. **Calendar View Enhancements**
+   - Legend now shows: Booked (blue), Cancelled (red), Sold Out (amber), Available (gray)
+   - Each date shows separate counts: "X booked" (blue badge) and "X cancelled" (red badge)
+   - Cancelled bookings show with red styling and "CANCELLED" badge
+   - Booking popup shows room number badge next to guest name
+   - Cancelled booking amount shows with strikethrough
+
+5. **Authentication Session Fix**
+   - Extended JWT token expiration from 30 minutes to 8 hours
+   - Added axios request interceptor to ensure token is always set
+   - Added axios response interceptor to handle 401 errors gracefully
+   - Shows user-friendly "Session expired" message instead of cryptic errors
+
+**Tests**: All features verified - `/app/test_reports/iteration_8.json`
+
+---
+
 ### 2026-02-23 - Calendar View, Country Dropdown, Channel API, Reports PDF
 **Features Implemented**:
 
