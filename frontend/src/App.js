@@ -6130,9 +6130,6 @@ const Guests = () => {
                     Total Bookings
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Completed Stays
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                     Upcoming Bookings
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -6144,7 +6141,7 @@ const Guests = () => {
                 </tr>
               </thead>
               <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {filteredGuests.map((guest) => (
+                {currentGuests.map((guest) => (
                   <tr key={guest.id} className="hover:bg-gray-700">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-white">{guest.name}</div>
@@ -6159,13 +6156,10 @@ const Guests = () => {
                       <div className="text-sm text-white">{guest.total_bookings}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-white">{guest.total_stays}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-white">{guest.upcoming_bookings}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-white">
                         {guest.last_stay ? guest.last_stay : 'Never'}
                       </div>
                     </td>
