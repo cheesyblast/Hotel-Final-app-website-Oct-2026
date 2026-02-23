@@ -4110,8 +4110,10 @@ const CalendarView = () => {
 
           {/* Actual days */}
           {daysArray.map(day => {
-            const dayBookings = getBookingsForDate(day);
-            const bookingCount = dayBookings.length;
+            const activeBookings = getActiveBookingsForDate(day);
+            const cancelledBookings = getCancelledBookingsForDate(day);
+            const activeCount = activeBookings.length;
+            const cancelledCount = cancelledBookings.length;
             const roomsLeft = getRoomsLeftToSell(day);
             const soldOut = isSoldOut(day);
             const isToday = new Date().getDate() === day && 
@@ -4132,14 +4134,22 @@ const CalendarView = () => {
                   <span className={`text-sm font-semibold ${isToday ? 'text-blue-400' : 'text-gray-400'}`}>
                     {day}
                   </span>
-                  {bookingCount > 0 && (
+                  {activeCount > 0 && (
                     <span className="text-xs text-gray-500">{roomsLeft} left</span>
                   )}
                 </div>
 
-                {bookingCount > 0 && (
-                  <div className={`${soldOut ? 'bg-amber-600' : 'bg-blue-600'} text-white text-xs px-2 py-1 rounded mb-2 text-center`}>
-                    {bookingCount} booking{bookingCount !== 1 ? 's' : ''}
+                {/* Active Bookings - Blue */}
+                {activeCount > 0 && (
+                  <div className={`${soldOut ? 'bg-amber-600' : 'bg-blue-600'} text-white text-xs px-2 py-1 rounded mb-1 text-center`}>
+                    {activeCount} booked
+                  </div>
+                )}
+
+                {/* Cancelled Bookings - Red */}
+                {cancelledCount > 0 && (
+                  <div className="bg-red-600 text-white text-xs px-2 py-1 rounded mb-1 text-center">
+                    {cancelledCount} cancelled
                   </div>
                 )}
 
@@ -4149,9 +4159,9 @@ const CalendarView = () => {
                   </div>
                 )}
 
-                {!soldOut && bookingCount === 0 && rooms.length > 0 && (
+                {!soldOut && activeCount === 0 && cancelledCount === 0 && rooms.length > 0 && (
                   <div className="text-gray-500 text-xs text-center mt-4">
-                    {rooms.length} rooms available
+                    {rooms.length} available
                   </div>
                 )}
               </div>
