@@ -8911,16 +8911,16 @@ const Restaurant = () => {
             </div>
           </div>
 
-          {/* Right Panel - Order Summary */}
-          <div className="w-1/3 bg-gray-900 p-6 overflow-y-auto max-h-[calc(100vh-120px)]">
+          {/* Right Panel - Order Summary - Mobile Optimized */}
+          <div className="w-full md:w-1/3 bg-gray-900 p-4 md:p-6 overflow-y-auto max-h-[50vh] md:max-h-[calc(100vh-120px)]">
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-white mb-4">Order Summary</h3>
+              <h3 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">Order Summary</h3>
               
               {/* Order Details */}
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3 text-sm md:text-base">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Type:</span>
-                  <span className="font-medium text-white">{newOrder.order_type === 'table' ? 'Table Order' : 'Room Service'}</span>
+                  <span className="font-medium text-white">{newOrder.order_type === 'table' ? 'Table' : 'Room Service'}</span>
                 </div>
                 
                 {newOrder.order_type === 'table' && newOrder.table_id && (
