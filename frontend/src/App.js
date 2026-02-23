@@ -7587,6 +7587,7 @@ const Navigation = () => {
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
+    { path: '/calendar', label: 'Calendar' },
     { path: '/restaurant', label: 'Restaurant' },
     { path: '/rooms', label: 'Rooms' },
     { path: '/guests', label: 'Guests' },
