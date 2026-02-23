@@ -7613,7 +7613,7 @@ const Navigation = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Desktop Navigation */}
         <div className="hidden md:flex space-x-4 items-center">
-          {navItems.slice(0, 5).map((item) => (
+          {navItems.slice(0, 6).map((item) => (
             <Link 
               key={item.path}
               to={item.path} 
@@ -7741,7 +7741,7 @@ const Navigation = () => {
           {/* Mobile Menu */}
           {isMobileMenuOpen && (
             <div className="pb-3 space-y-1">
-              {navItems.slice(0, 5).map((item) => (
+              {navItems.slice(0, 6).map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
