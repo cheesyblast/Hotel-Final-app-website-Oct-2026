@@ -13263,6 +13263,7 @@ function AppContent() {
         <main className="bg-gray-900">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/calendar" element={<CalendarView />} />
             <Route path="/restaurant" element={<Restaurant />} />
             <Route path="/rooms" element={<Rooms />} />
             <Route path="/guests" element={<Guests />} />
