@@ -3875,8 +3875,10 @@ const CalendarView = () => {
         axios.get(`${API}/bookings`),
         axios.get(`${API}/rooms`)
       ]);
-      setBookings(bookingsRes.data);
-      setRooms(roomsRes.data);
+      // Handle paginated response structure
+      const bookingsData = bookingsRes.data.bookings || bookingsRes.data || [];
+      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      setRooms(roomsRes.data || []);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
