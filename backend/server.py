@@ -645,6 +645,32 @@ class SMSTemplateCreate(BaseModel):
     body: str
     variables: List[str] = []
 
+# ==================== CHANNEL API SETTINGS ====================
+
+class ChannelApiSettings(BaseModel):
+    """Settings for OTA channel manager API integrations"""
+    booking_com_api_key: str = ""
+    booking_com_property_id: str = ""
+    booking_com_enabled: bool = False
+    expedia_api_key: str = ""
+    expedia_property_id: str = ""
+    expedia_enabled: bool = False
+    agoda_api_key: str = ""
+    agoda_property_id: str = ""
+    agoda_enabled: bool = False
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ChannelApiSettingsUpdate(BaseModel):
+    booking_com_api_key: Optional[str] = None
+    booking_com_property_id: Optional[str] = None
+    booking_com_enabled: Optional[bool] = None
+    expedia_api_key: Optional[str] = None
+    expedia_property_id: Optional[str] = None
+    expedia_enabled: Optional[bool] = None
+    agoda_api_key: Optional[str] = None
+    agoda_property_id: Optional[str] = None
+    agoda_enabled: Optional[bool] = None
+
 # ==================== MAINTENANCE TRACKING ====================
 
 class MaintenanceItem(BaseModel):
