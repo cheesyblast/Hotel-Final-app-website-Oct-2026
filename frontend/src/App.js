@@ -10860,6 +10860,29 @@ const Settings = () => {
     }
   };
 
+  // Channel API Settings Functions
+  const fetchChannelApiSettings = async () => {
+    try {
+      const response = await axios.get(`${API}/channel-api-settings`);
+      setChannelApiSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching channel API settings:', error);
+      // Keep default empty state if not found
+    }
+  };
+
+  const handleSaveChannelApiSettings = async () => {
+    setSavingChannelApi(true);
+    try {
+      await axios.put(`${API}/channel-api-settings`, channelApiSettings);
+      alert('Channel API settings saved successfully!');
+    } catch (error) {
+      alert('Error saving channel API settings: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setSavingChannelApi(false);
+    }
+  };
+
   // Tax Configuration Functions
   const fetchTaxConfigs = async () => {
     try {
