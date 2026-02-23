@@ -82,7 +82,20 @@ const AuthProvider = ({ children }) => {
 
   // Setup axios response interceptor to handle auth errors
   useEffect(() => {
-    const interceptor = axios.interceptors.response.use(
+    // Request interceptor - ensure token is always set from localStorage
+    const requestInterceptor = axios.interceptors.request.use(
+      (config) => {
+        const storedToken = localStorage.getItem('token');
+        if (storedToken && !config.headers['Authorization']) {
+          config.headers['Authorization'] = `Bearer ${storedToken}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
+    // Response interceptor - handle auth errors
+    const responseInterceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         // Handle 401 Unauthorized errors
@@ -101,9 +114,10 @@ const AuthProvider = ({ children }) => {
       }
     );
 
-    // Cleanup interceptor on unmount
+    // Cleanup interceptors on unmount
     return () => {
-      axios.interceptors.response.eject(interceptor);
+      axios.interceptors.request.eject(requestInterceptor);
+      axios.interceptors.response.eject(responseInterceptor);
     };
   }, []);
 
