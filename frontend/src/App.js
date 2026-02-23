@@ -10632,6 +10632,20 @@ const Settings = () => {
     contact_phone: ''
   });
   
+  // Channel API Integration state (for OTA integrations)
+  const [channelApiSettings, setChannelApiSettings] = useState({
+    booking_com_api_key: '',
+    booking_com_property_id: '',
+    booking_com_enabled: false,
+    expedia_api_key: '',
+    expedia_property_id: '',
+    expedia_enabled: false,
+    agoda_api_key: '',
+    agoda_property_id: '',
+    agoda_enabled: false
+  });
+  const [savingChannelApi, setSavingChannelApi] = useState(false);
+  
   // Get current user context
   const { user } = useAuth();
   
