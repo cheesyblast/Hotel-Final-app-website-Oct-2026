@@ -6236,6 +6236,34 @@ const Guests = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-700 border-t border-gray-600 rounded-b-lg">
+              <div className="text-sm text-gray-300">
+                Showing {indexOfFirstGuest + 1} to {Math.min(indexOfLastGuest, filteredGuests.length)} of {filteredGuests.length} guests
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 bg-gray-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-500"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-white">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 bg-gray-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-500"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         )}
       </div>
 
