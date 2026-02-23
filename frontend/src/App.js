@@ -3980,9 +3980,18 @@ const CalendarView = () => {
     });
   };
 
+  // Separate active and cancelled bookings
+  const getActiveBookingsForDate = (day) => {
+    return getBookingsForDate(day).filter(b => b.status !== 'Cancelled');
+  };
+
+  const getCancelledBookingsForDate = (day) => {
+    return getBookingsForDate(day).filter(b => b.status === 'Cancelled');
+  };
+
   const getRoomsLeftToSell = (day) => {
-    const bookingsOnDay = getBookingsForDate(day);
-    const occupiedRooms = bookingsOnDay.length;
+    const activeBookings = getActiveBookingsForDate(day);
+    const occupiedRooms = activeBookings.length;
     const totalRooms = rooms.length;
     return Math.max(0, totalRooms - occupiedRooms);
   };
