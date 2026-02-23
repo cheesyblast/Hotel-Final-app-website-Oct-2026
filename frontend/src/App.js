@@ -2360,10 +2360,33 @@ const Dashboard = () => {
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Check In Customer</h3>
             {selectedBooking && (
-              <div className="mb-4">
-                <p className="text-sm text-gray-600">Guest: {selectedBooking.guest_name}</p>
-                <p className="text-sm text-gray-600">Room: {selectedBooking.room_number}</p>
-                <p className="text-sm text-gray-600">Phone: {selectedBooking.guest_phone}</p>
+              <div className="mb-4 space-y-2">
+                <p className="text-sm text-gray-600">Guest: <span className="font-medium text-gray-800">{selectedBooking.guest_name}</span></p>
+                <p className="text-sm text-gray-600">Room: <span className="font-medium text-gray-800">{selectedBooking.room_number}</span></p>
+                <p className="text-sm text-gray-600">Phone: <span className="font-medium text-gray-800">{selectedBooking.guest_phone}</span></p>
+                <p className="text-sm text-gray-600">Check-in: <span className="font-medium text-gray-800">{selectedBooking.check_in_date}</span></p>
+                <p className="text-sm text-gray-600">Check-out: <span className="font-medium text-gray-800">{selectedBooking.check_out_date}</span></p>
+                
+                {/* Booking Amount Summary */}
+                <div className="mt-3 pt-3 border-t border-gray-200 bg-blue-50 rounded-md p-3">
+                  <h4 className="font-medium text-blue-800 mb-2">Booking Amount</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Rate per Night:</span>
+                      <span className="font-medium text-gray-800">LKR {(selectedBooking.rate_per_night || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Room Charges:</span>
+                      <span className="font-medium text-gray-800">LKR {(selectedBooking.booking_amount || 0).toLocaleString()}</span>
+                    </div>
+                    {selectedBooking.commission_amount > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>Commission ({selectedBooking.booking_channel_name}):</span>
+                        <span>LKR {selectedBooking.commission_amount.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
             <div className="space-y-4">
