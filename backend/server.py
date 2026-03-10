@@ -303,6 +303,13 @@ class FinancialSummary(BaseModel):
     period_start: date
     period_end: date
 
+# Available pages for role-based access control
+AVAILABLE_PAGES = [
+    "dashboard", "calendar", "restaurant", "rooms", "guests", "bookings",
+    "income_expense", "expenses", "stocks", "commissions", "reports",
+    "payroll", "maintenance", "settings"
+]
+
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     username: str
@@ -311,6 +318,7 @@ class User(BaseModel):
     role: str = "Staff"  # Admin, Manager, Staff, Restaurant Manager
     email: str = ""
     is_active: bool = True
+    page_permissions: List[str] = []  # List of allowed pages - empty means all (for Admin)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: Optional[datetime] = None
 
@@ -320,6 +328,7 @@ class UserCreate(BaseModel):
     full_name: str
     role: str = "Staff"
     email: str = ""
+    page_permissions: List[str] = []
 
 class UserLogin(BaseModel):
     username: str
@@ -332,6 +341,7 @@ class UserResponse(BaseModel):
     role: str
     email: str
     is_active: bool
+    page_permissions: List[str] = []
     created_at: datetime
     last_login: Optional[datetime] = None
 
@@ -450,6 +460,8 @@ class MenuItem(BaseModel):
     prep_time: int = 15  # minutes
     image_url: str = ""
     image: str = ""  # base64 encoded image
+    track_stock: bool = False  # Whether to track stock for this item
+    stock_item_id: Optional[str] = None  # Link to stock item for auto-deduct
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class MenuItemCreate(BaseModel):
@@ -460,6 +472,8 @@ class MenuItemCreate(BaseModel):
     is_vegetarian: bool = False
     is_spicy: bool = False
     prep_time: int = 15
+    track_stock: bool = False
+    stock_item_id: Optional[str] = None
 
 class RestaurantTable(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -729,6 +743,65 @@ class MaintenanceTaskCreate(BaseModel):
     estimated_cost: float = 0
     scheduled_date: Optional[date] = None
     notes: str = ""
+
+# ==================== STOCK/INVENTORY MANAGEMENT ====================
+
+class StockItem(BaseModel):
+    """Stock item for restaurant items and room maintenance supplies"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    item_name: str
+    item_type: str  # restaurant, maintenance
+    category: str = "General"  # For grouping - Beverages, Food, Linens, Toiletries, etc.
+    unit: str = "pcs"  # pcs, bottles, kg, liters, sets, etc.
+    current_stock: float = 0
+    low_stock_threshold: float = 10
+    cost_per_unit: float = 0
+    linked_menu_item_id: Optional[str] = None  # Link to restaurant menu item for auto-deduct
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class StockItemCreate(BaseModel):
+    item_name: str
+    item_type: str  # restaurant, maintenance
+    category: str = "General"
+    unit: str = "pcs"
+    current_stock: float = 0
+    low_stock_threshold: float = 10
+    cost_per_unit: float = 0
+    linked_menu_item_id: Optional[str] = None
+
+class StockTransaction(BaseModel):
+    """Record of stock additions and removals"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    stock_item_id: str
+    stock_item_name: str
+    transaction_type: str  # add, remove, sale, adjustment
+    quantity: float
+    previous_stock: float
+    new_stock: float
+    notes: str = ""
+    reference_id: Optional[str] = None  # Order ID if from sale
+    created_by: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class StockAdjustment(BaseModel):
+    """For adding or removing stock"""
+    quantity: float
+    notes: str = ""
+    transaction_type: str = "add"  # add, remove, adjustment
+
+class MenuItemUpdate(BaseModel):
+    """Update menu item with stock tracking"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category_id: Optional[str] = None
+    is_available: Optional[bool] = None
+    is_vegetarian: Optional[bool] = None
+    image: Optional[str] = None
+    track_stock: Optional[bool] = None
+    stock_item_id: Optional[str] = None
 
 # ==================== PAYROLL SYSTEM (Sri Lanka Specific) ====================
 
@@ -2263,12 +2336,17 @@ async def create_user(user: UserCreate, current_user: UserResponse = Depends(get
     # Hash password
     hashed_password = get_password_hash(user.password)
     
+    # Admin always has all permissions (empty list means all)
+    # For other roles, use provided permissions
+    page_permissions = [] if user.role == "Admin" else user.page_permissions
+    
     user_obj = User(
         username=user.username,
         password_hash=hashed_password,
         full_name=user.full_name,
         role=user.role,
-        email=user.email
+        email=user.email,
+        page_permissions=page_permissions
     )
     user_dict = user_obj.dict()
     await db.users.insert_one(user_dict)
@@ -2340,6 +2418,64 @@ async def toggle_user_status(user_id: str, current_user: UserResponse = Depends(
     )
     
     return {"message": f"User {'activated' if new_status else 'deactivated'} successfully"}
+
+@api_router.get("/users/available-pages")
+async def get_available_pages():
+    """Get list of available pages for role-based access control"""
+    pages = [
+        {"id": "dashboard", "name": "Dashboard", "description": "Main dashboard view"},
+        {"id": "calendar", "name": "Calendar", "description": "Booking calendar view"},
+        {"id": "restaurant", "name": "Restaurant", "description": "Restaurant orders and management"},
+        {"id": "rooms", "name": "Rooms", "description": "Room management"},
+        {"id": "guests", "name": "Guests", "description": "Guest management"},
+        {"id": "bookings", "name": "Bookings", "description": "Booking management"},
+        {"id": "income_expense", "name": "Income/Expense", "description": "Income and expense tracking"},
+        {"id": "expenses", "name": "Expenses", "description": "Expense management"},
+        {"id": "stocks", "name": "Stock Management", "description": "Inventory and stock tracking"},
+        {"id": "commissions", "name": "Commissions", "description": "Commission tracking"},
+        {"id": "reports", "name": "Reports", "description": "Financial reports"},
+        {"id": "payroll", "name": "Payroll", "description": "Employee payroll management"},
+        {"id": "maintenance", "name": "Maintenance", "description": "Room maintenance tracking"},
+        {"id": "settings", "name": "Settings", "description": "System settings"}
+    ]
+    return pages
+
+@api_router.put("/users/{user_id}/permissions")
+async def update_user_permissions(user_id: str, permissions: List[str], current_user: UserResponse = Depends(get_current_active_admin)):
+    """Update user page permissions (Admin only)"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent modifying admin user permissions
+    if user.get("username") == "admin":
+        raise HTTPException(status_code=400, detail="Cannot modify admin user permissions")
+    
+    # Admin role always has all permissions
+    if user.get("role") == "Admin":
+        raise HTTPException(status_code=400, detail="Admin role always has all permissions")
+    
+    # Validate permissions
+    valid_pages = [p["id"] for p in await get_available_pages()]
+    invalid_permissions = [p for p in permissions if p not in valid_pages]
+    if invalid_permissions:
+        raise HTTPException(status_code=400, detail=f"Invalid permissions: {invalid_permissions}")
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"page_permissions": permissions}}
+    )
+    
+    # Log activity
+    await log_activity(
+        action="user_permissions_updated",
+        description=f"Permissions updated for user '{user.get('username', 'Unknown')}'",
+        user_name=current_user.username,
+        entity_type="user",
+        entity_id=user_id
+    )
+    
+    return {"message": "User permissions updated successfully"}
 
 # Settings Management Routes
 @api_router.get("/settings")
@@ -2887,11 +3023,11 @@ async def download_bookings(
 
 @api_router.get("/bookings/upcoming", response_model=List[Booking])
 async def get_upcoming_bookings():
-    today = datetime.combine(datetime.now().date(), datetime.min.time())
+    """Get all bookings with 'Upcoming' status - regardless of check-in date.
+    Bookings remain 'Upcoming' until checked in or cancelled."""
     bookings = await db.bookings.find({
-        "status": "Upcoming",
-        "check_in_date": {"$gte": today}
-    }).sort("check_in_date", 1).to_list(10)
+        "status": "Upcoming"
+    }).sort("check_in_date", 1).to_list(20)
     
     # Convert datetime back to date for response
     for booking in bookings:
@@ -5708,6 +5844,10 @@ async def create_restaurant_order(
     
     await db.restaurant_orders.insert_one(order_dict)
     
+    # Deduct stock for items with stock tracking enabled
+    order_items_for_stock = [{"item_id": item.item_id, "name": item.name, "quantity": item.quantity} for item in order.items]
+    await deduct_stock_for_order(order_items_for_stock, new_order.id, current_user.username)
+    
     # NOTE: Restaurant charges are ONLY added to room bill when the user explicitly
     # chooses "Add to Room Bill" during payment. This prevents double-counting
     # when customers pay directly at the restaurant.
@@ -6459,6 +6599,189 @@ async def get_maintenance_summary():
             "total": len(tasks)
         }
     }
+
+# ==================== STOCK/INVENTORY MANAGEMENT ====================
+
+@api_router.get("/stocks")
+async def get_stocks(item_type: Optional[str] = None, category: Optional[str] = None):
+    """Get all stock items with optional filters"""
+    query = {"is_active": True}
+    if item_type:
+        query["item_type"] = item_type
+    if category:
+        query["category"] = category
+    
+    stocks = await db.stocks.find(query, {"_id": 0}).sort("item_name", 1).to_list(500)
+    return stocks
+
+@api_router.post("/stocks")
+async def create_stock_item(stock: StockItemCreate, current_user: UserResponse = Depends(get_current_user)):
+    """Create a new stock item"""
+    stock_dict = stock.dict()
+    stock_obj = StockItem(**stock_dict)
+    await db.stocks.insert_one(stock_obj.dict())
+    
+    # Record initial stock transaction if any
+    if stock_dict.get("current_stock", 0) > 0:
+        transaction = StockTransaction(
+            stock_item_id=stock_obj.id,
+            stock_item_name=stock_obj.item_name,
+            transaction_type="add",
+            quantity=stock_dict["current_stock"],
+            previous_stock=0,
+            new_stock=stock_dict["current_stock"],
+            notes="Initial stock",
+            created_by=current_user.username
+        )
+        await db.stock_transactions.insert_one(transaction.dict())
+    
+    return {"message": "Stock item created", "stock": stock_obj.dict()}
+
+@api_router.put("/stocks/{stock_id}")
+async def update_stock_item(stock_id: str, updates: dict, current_user: UserResponse = Depends(get_current_user)):
+    """Update stock item details (not quantity - use adjust endpoint for that)"""
+    updates["updated_at"] = datetime.utcnow()
+    
+    # Don't allow direct quantity updates through this endpoint
+    if "current_stock" in updates:
+        del updates["current_stock"]
+    
+    result = await db.stocks.update_one(
+        {"id": stock_id},
+        {"$set": updates}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Stock item not found")
+    return {"message": "Stock item updated"}
+
+@api_router.post("/stocks/{stock_id}/adjust")
+async def adjust_stock(stock_id: str, adjustment: StockAdjustment, current_user: UserResponse = Depends(get_current_user)):
+    """Add or remove stock quantity"""
+    stock = await db.stocks.find_one({"id": stock_id})
+    if not stock:
+        raise HTTPException(status_code=404, detail="Stock item not found")
+    
+    previous_stock = stock.get("current_stock", 0)
+    
+    if adjustment.transaction_type == "add":
+        new_stock = previous_stock + adjustment.quantity
+    elif adjustment.transaction_type == "remove":
+        new_stock = previous_stock - adjustment.quantity
+        if new_stock < 0:
+            raise HTTPException(status_code=400, detail="Cannot reduce stock below 0")
+    else:  # adjustment
+        new_stock = adjustment.quantity
+    
+    # Update stock
+    await db.stocks.update_one(
+        {"id": stock_id},
+        {"$set": {"current_stock": new_stock, "updated_at": datetime.utcnow()}}
+    )
+    
+    # Record transaction
+    transaction = StockTransaction(
+        stock_item_id=stock_id,
+        stock_item_name=stock.get("item_name", ""),
+        transaction_type=adjustment.transaction_type,
+        quantity=adjustment.quantity,
+        previous_stock=previous_stock,
+        new_stock=new_stock,
+        notes=adjustment.notes,
+        created_by=current_user.username
+    )
+    await db.stock_transactions.insert_one(transaction.dict())
+    
+    return {
+        "message": f"Stock {adjustment.transaction_type}ed successfully",
+        "previous_stock": previous_stock,
+        "new_stock": new_stock
+    }
+
+@api_router.delete("/stocks/{stock_id}")
+async def delete_stock_item(stock_id: str):
+    """Soft delete a stock item (mark as inactive)"""
+    result = await db.stocks.update_one(
+        {"id": stock_id},
+        {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Stock item not found")
+    return {"message": "Stock item deleted"}
+
+@api_router.get("/stocks/transactions")
+async def get_stock_transactions(stock_item_id: Optional[str] = None, limit: int = 100):
+    """Get stock transaction history"""
+    query = {}
+    if stock_item_id:
+        query["stock_item_id"] = stock_item_id
+    
+    transactions = await db.stock_transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return transactions
+
+@api_router.get("/stocks/low-stock")
+async def get_low_stock_items():
+    """Get items that are below their low stock threshold"""
+    pipeline = [
+        {"$match": {"is_active": True}},
+        {"$match": {"$expr": {"$lte": ["$current_stock", "$low_stock_threshold"]}}},
+        {"$project": {"_id": 0}}
+    ]
+    low_stock_items = await db.stocks.aggregate(pipeline).to_list(100)
+    return low_stock_items
+
+@api_router.get("/stocks/summary")
+async def get_stocks_summary():
+    """Get stock summary statistics"""
+    all_stocks = await db.stocks.find({"is_active": True}, {"_id": 0}).to_list(500)
+    
+    restaurant_stocks = [s for s in all_stocks if s.get("item_type") == "restaurant"]
+    maintenance_stocks = [s for s in all_stocks if s.get("item_type") == "maintenance"]
+    
+    # Calculate low stock items
+    low_stock = [s for s in all_stocks if s.get("current_stock", 0) <= s.get("low_stock_threshold", 10)]
+    
+    # Calculate total value
+    total_value = sum(s.get("current_stock", 0) * s.get("cost_per_unit", 0) for s in all_stocks)
+    
+    return {
+        "total_items": len(all_stocks),
+        "restaurant_items": len(restaurant_stocks),
+        "maintenance_items": len(maintenance_stocks),
+        "low_stock_count": len(low_stock),
+        "total_stock_value": total_value
+    }
+
+# Helper function to deduct stock when restaurant order is placed
+async def deduct_stock_for_order(order_items: list, order_id: str, username: str):
+    """Deduct stock for menu items that have stock tracking enabled"""
+    for item in order_items:
+        menu_item = await db.menu_items.find_one({"id": item.get("item_id")})
+        if menu_item and menu_item.get("track_stock") and menu_item.get("stock_item_id"):
+            stock = await db.stocks.find_one({"id": menu_item["stock_item_id"]})
+            if stock:
+                quantity_to_deduct = item.get("quantity", 1)
+                previous_stock = stock.get("current_stock", 0)
+                new_stock = max(0, previous_stock - quantity_to_deduct)
+                
+                # Update stock
+                await db.stocks.update_one(
+                    {"id": stock["id"]},
+                    {"$set": {"current_stock": new_stock, "updated_at": datetime.utcnow()}}
+                )
+                
+                # Record transaction
+                transaction = StockTransaction(
+                    stock_item_id=stock["id"],
+                    stock_item_name=stock.get("item_name", ""),
+                    transaction_type="sale",
+                    quantity=quantity_to_deduct,
+                    previous_stock=previous_stock,
+                    new_stock=new_stock,
+                    notes=f"Sold: {item.get('name', '')} x{quantity_to_deduct}",
+                    reference_id=order_id,
+                    created_by=username
+                )
+                await db.stock_transactions.insert_one(transaction.dict())
 
 # ==================== PAYROLL SYSTEM ====================
 

@@ -7738,7 +7738,8 @@ const Navigation = () => {
   const expenseItems = [
     { path: '/expenses', label: 'All Expenses' },
     { path: '/restaurant-expenses', label: 'Restaurant Expenses' },
-    { path: '/maintenance', label: 'Maintenance' }
+    { path: '/maintenance', label: 'Maintenance' },
+    { path: '/stocks', label: 'Stock Management' }
   ];
 
   return (
@@ -10273,6 +10274,546 @@ const Maintenance = () => {
   );
 };
 
+// Stock Management Component
+const StocksManagement = () => {
+  const [stocks, setStocks] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all'); // all, restaurant, maintenance, transactions
+  const [showAddStockModal, setShowAddStockModal] = useState(false);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
+  
+  const [stockForm, setStockForm] = useState({
+    item_name: '',
+    item_type: 'restaurant',
+    category: 'General',
+    unit: 'pcs',
+    current_stock: 0,
+    low_stock_threshold: 10,
+    cost_per_unit: 0,
+    linked_menu_item_id: ''
+  });
+  
+  const [adjustForm, setAdjustForm] = useState({
+    quantity: 0,
+    notes: '',
+    transaction_type: 'add'
+  });
+
+  const categories = {
+    restaurant: ['Beverages', 'Food Items', 'Snacks', 'Dairy', 'Vegetables', 'Meat', 'General'],
+    maintenance: ['Linens', 'Toiletries', 'Cleaning Supplies', 'Electrical', 'Plumbing', 'Furniture', 'General']
+  };
+
+  const units = ['pcs', 'bottles', 'kg', 'liters', 'sets', 'boxes', 'packets', 'rolls'];
+
+  useEffect(() => {
+    fetchStocks();
+    fetchTransactions();
+    fetchSummary();
+    fetchMenuItems();
+  }, []);
+
+  const fetchStocks = async () => {
+    try {
+      const response = await axios.get(`${API}/stocks`);
+      setStocks(response.data);
+    } catch (error) {
+      console.error('Error fetching stocks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const response = await axios.get(`${API}/stocks/transactions?limit=50`);
+      setTransactions(response.data);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    }
+  };
+
+  const fetchSummary = async () => {
+    try {
+      const response = await axios.get(`${API}/stocks/summary`);
+      setSummary(response.data);
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+    }
+  };
+
+  const fetchMenuItems = async () => {
+    try {
+      const response = await axios.get(`${API}/restaurant/menu`);
+      setMenuItems(response.data);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    }
+  };
+
+  const handleAddStock = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/stocks`, stockForm);
+      alert('Stock item added successfully!');
+      setShowAddStockModal(false);
+      setStockForm({
+        item_name: '', item_type: 'restaurant', category: 'General', unit: 'pcs',
+        current_stock: 0, low_stock_threshold: 10, cost_per_unit: 0, linked_menu_item_id: ''
+      });
+      fetchStocks();
+      fetchSummary();
+    } catch (error) {
+      alert('Error adding stock: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleAdjustStock = async (e) => {
+    e.preventDefault();
+    if (!selectedStock) return;
+    try {
+      await axios.post(`${API}/stocks/${selectedStock.id}/adjust`, adjustForm);
+      alert(`Stock ${adjustForm.transaction_type === 'add' ? 'added' : 'removed'} successfully!`);
+      setShowAdjustModal(false);
+      setAdjustForm({ quantity: 0, notes: '', transaction_type: 'add' });
+      setSelectedStock(null);
+      fetchStocks();
+      fetchTransactions();
+      fetchSummary();
+    } catch (error) {
+      alert('Error adjusting stock: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleDeleteStock = async (stockId) => {
+    if (!window.confirm('Are you sure you want to delete this stock item?')) return;
+    try {
+      await axios.delete(`${API}/stocks/${stockId}`);
+      fetchStocks();
+      fetchSummary();
+    } catch (error) {
+      alert('Error deleting stock: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const openAdjustModal = (stock, type) => {
+    setSelectedStock(stock);
+    setAdjustForm({ quantity: 0, notes: '', transaction_type: type });
+    setShowAdjustModal(true);
+  };
+
+  const getFilteredStocks = () => {
+    if (activeTab === 'all') return stocks;
+    if (activeTab === 'restaurant') return stocks.filter(s => s.item_type === 'restaurant');
+    if (activeTab === 'maintenance') return stocks.filter(s => s.item_type === 'maintenance');
+    return stocks;
+  };
+
+  const isLowStock = (stock) => stock.current_stock <= stock.low_stock_threshold;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-teal-800 to-cyan-700 rounded-lg p-6 mb-6">
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">Stock Management</h2>
+            <p className="text-teal-200">Manage restaurant items and room maintenance supplies</p>
+          </div>
+          <button
+            onClick={() => setShowAddStockModal(true)}
+            className="bg-white text-teal-700 px-4 py-2 rounded-md font-medium hover:bg-teal-50"
+            data-testid="add-stock-btn"
+          >
+            + Add Stock Item
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <p className="text-gray-400 text-sm">Total Items</p>
+          <p className="text-2xl font-bold text-white">{summary.total_items || 0}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <p className="text-gray-400 text-sm">Restaurant Items</p>
+          <p className="text-2xl font-bold text-blue-400">{summary.restaurant_items || 0}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <p className="text-gray-400 text-sm">Maintenance Items</p>
+          <p className="text-2xl font-bold text-green-400">{summary.maintenance_items || 0}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <p className="text-gray-400 text-sm">Low Stock Alerts</p>
+          <p className="text-2xl font-bold text-red-400">{summary.low_stock_count || 0}</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex space-x-2 mb-6 border-b border-gray-700 overflow-x-auto">
+        {[
+          { id: 'all', label: 'All Items' },
+          { id: 'restaurant', label: 'Restaurant' },
+          { id: 'maintenance', label: 'Maintenance' },
+          { id: 'transactions', label: 'Transaction History' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 font-medium whitespace-nowrap ${
+              activeTab === tab.id 
+                ? 'text-teal-400 border-b-2 border-teal-400' 
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stock Items Table */}
+      {activeTab !== 'transactions' ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Item Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Current Stock</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Unit</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Cost/Unit</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {getFilteredStocks().length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-8 text-center text-gray-400">
+                      No stock items found. Add your first item!
+                    </td>
+                  </tr>
+                ) : (
+                  getFilteredStocks().map(stock => (
+                    <tr key={stock.id} className={`hover:bg-gray-700 ${isLowStock(stock) ? 'bg-red-900/20' : ''}`}>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-white">{stock.item_name}</div>
+                        {stock.linked_menu_item_id && (
+                          <div className="text-xs text-blue-400">Linked to menu</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          stock.item_type === 'restaurant' ? 'bg-blue-900 text-blue-300' : 'bg-green-900 text-green-300'
+                        }`}>
+                          {stock.item_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{stock.category}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-lg font-bold ${isLowStock(stock) ? 'text-red-400' : 'text-white'}`}>
+                          {stock.current_stock}
+                        </span>
+                        {isLowStock(stock) && (
+                          <span className="ml-2 text-xs text-red-400">Low!</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{stock.unit}</td>
+                      <td className="px-4 py-3 text-sm text-green-400">LKR {stock.cost_per_unit?.toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {isLowStock(stock) ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-900 text-red-300">Low Stock</span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-900 text-green-300">OK</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => openAdjustModal(stock, 'add')}
+                            className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
+                            title="Add Stock"
+                          >
+                            +
+                          </button>
+                          <button
+                            onClick={() => openAdjustModal(stock, 'remove')}
+                            className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                            title="Remove Stock"
+                          >
+                            -
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStock(stock.id)}
+                            className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-500"
+                            title="Delete"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* Transactions Tab */
+        <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Item</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Quantity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Previous</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">New</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Notes</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-8 text-center text-gray-400">
+                      No transactions yet
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.map(tx => (
+                    <tr key={tx.id} className="hover:bg-gray-700">
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {new Date(tx.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white">{tx.stock_item_name}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          tx.transaction_type === 'add' ? 'bg-green-900 text-green-300' :
+                          tx.transaction_type === 'remove' ? 'bg-red-900 text-red-300' :
+                          tx.transaction_type === 'sale' ? 'bg-blue-900 text-blue-300' :
+                          'bg-gray-700 text-gray-300'
+                        }`}>
+                          {tx.transaction_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-white">{tx.quantity}</td>
+                      <td className="px-4 py-3 text-sm text-gray-400">{tx.previous_stock}</td>
+                      <td className="px-4 py-3 text-sm text-white">{tx.new_stock}</td>
+                      <td className="px-4 py-3 text-sm text-gray-300">{tx.notes || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-400">{tx.created_by}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Modal */}
+      {showAddStockModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-white mb-4">Add Stock Item</h3>
+            <form onSubmit={handleAddStock} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Item Name *</label>
+                <input
+                  type="text"
+                  value={stockForm.item_name}
+                  onChange={(e) => setStockForm({...stockForm, item_name: e.target.value})}
+                  required
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  placeholder="e.g., Water Bottles, Bed Sheets"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Type *</label>
+                  <select
+                    value={stockForm.item_type}
+                    onChange={(e) => setStockForm({...stockForm, item_type: e.target.value, category: 'General'})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  >
+                    <option value="restaurant">Restaurant</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Category</label>
+                  <select
+                    value={stockForm.category}
+                    onChange={(e) => setStockForm({...stockForm, category: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  >
+                    {categories[stockForm.item_type]?.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Initial Stock</label>
+                  <input
+                    type="number"
+                    value={stockForm.current_stock}
+                    onChange={(e) => setStockForm({...stockForm, current_stock: parseFloat(e.target.value) || 0})}
+                    min="0"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Unit</label>
+                  <select
+                    value={stockForm.unit}
+                    onChange={(e) => setStockForm({...stockForm, unit: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  >
+                    {units.map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Low Stock Alert</label>
+                  <input
+                    type="number"
+                    value={stockForm.low_stock_threshold}
+                    onChange={(e) => setStockForm({...stockForm, low_stock_threshold: parseFloat(e.target.value) || 0})}
+                    min="0"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Cost per Unit (LKR)</label>
+                  <input
+                    type="number"
+                    value={stockForm.cost_per_unit}
+                    onChange={(e) => setStockForm({...stockForm, cost_per_unit: parseFloat(e.target.value) || 0})}
+                    min="0"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  />
+                </div>
+              </div>
+
+              {stockForm.item_type === 'restaurant' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Link to Menu Item (for auto-deduct)</label>
+                  <select
+                    value={stockForm.linked_menu_item_id}
+                    onChange={(e) => setStockForm({...stockForm, linked_menu_item_id: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  >
+                    <option value="">-- None (manual only) --</option>
+                    {menuItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Stock will auto-deduct when this menu item is sold</p>
+                </div>
+              )}
+
+              <div className="flex space-x-3 pt-4">
+                <button type="submit" className="flex-1 bg-teal-600 text-white py-2 px-4 rounded-md hover:bg-teal-700">
+                  Add Item
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStockModal(false)}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Stock Modal */}
+      {showAdjustModal && selectedStock && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              {adjustForm.transaction_type === 'add' ? 'Add Stock' : 'Remove Stock'}
+            </h3>
+            <div className="mb-4 p-3 bg-gray-700 rounded-lg">
+              <p className="text-white font-medium">{selectedStock.item_name}</p>
+              <p className="text-gray-400 text-sm">Current: {selectedStock.current_stock} {selectedStock.unit}</p>
+            </div>
+            <form onSubmit={handleAdjustStock} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Quantity *</label>
+                <input
+                  type="number"
+                  value={adjustForm.quantity}
+                  onChange={(e) => setAdjustForm({...adjustForm, quantity: parseFloat(e.target.value) || 0})}
+                  required
+                  min="0.01"
+                  step="0.01"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Notes</label>
+                <input
+                  type="text"
+                  value={adjustForm.notes}
+                  onChange={(e) => setAdjustForm({...adjustForm, notes: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  placeholder="e.g., Purchased from supplier"
+                />
+              </div>
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="submit"
+                  className={`flex-1 py-2 px-4 rounded-md text-white ${
+                    adjustForm.transaction_type === 'add' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  {adjustForm.transaction_type === 'add' ? 'Add' : 'Remove'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAdjustModal(false); setSelectedStock(null); }}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Expense Tracking Component (All Expenses)
 const ExpenseTracking = () => {
   const [expenses, setExpenses] = useState([]);
@@ -10786,8 +11327,11 @@ const Settings = () => {
     password: '',
     full_name: '',
     role: 'Staff',
-    email: ''
+    email: '',
+    page_permissions: []
   });
+  
+  const [availablePages, setAvailablePages] = useState([]);
   
   const [settingsForm, setSettingsForm] = useState({
     hotel_name: '',
@@ -10848,7 +11392,8 @@ const Settings = () => {
         fetchPayrollSettings(),
         fetchActivityLogs(),
         fetchTaxConfigs(),
-        fetchChannelApiSettings()
+        fetchChannelApiSettings(),
+        fetchAvailablePages()
       ]);
     } catch (error) {
       console.error('Error fetching settings data:', error);
@@ -10872,6 +11417,15 @@ const Settings = () => {
     } catch (error) {
       console.error('Error fetching payroll settings:', error);
       // Keep default settings if fetch fails
+    }
+  };
+
+  const fetchAvailablePages = async () => {
+    try {
+      const response = await axios.get(`${API}/users/available-pages`);
+      setAvailablePages(response.data);
+    } catch (error) {
+      console.error('Error fetching available pages:', error);
     }
   };
 
@@ -11123,13 +11677,42 @@ const Settings = () => {
     e.preventDefault();
     try {
       await axios.post(`${API}/users`, newUser);
-      setNewUser({ username: '', password: '', full_name: '', role: 'Staff', email: '' });
+      setNewUser({ username: '', password: '', full_name: '', role: 'Staff', email: '', page_permissions: [] });
       setShowCreateUserModal(false);
       fetchUsers();
       alert('User created successfully!');
     } catch (error) {
       alert('Error creating user: ' + (error.response?.data?.detail || error.message));
     }
+  };
+
+  const handleTogglePagePermission = (pageId) => {
+    const currentPermissions = newUser.page_permissions || [];
+    if (currentPermissions.includes(pageId)) {
+      setNewUser({
+        ...newUser,
+        page_permissions: currentPermissions.filter(p => p !== pageId)
+      });
+    } else {
+      setNewUser({
+        ...newUser,
+        page_permissions: [...currentPermissions, pageId]
+      });
+    }
+  };
+
+  const handleSelectAllPages = () => {
+    setNewUser({
+      ...newUser,
+      page_permissions: availablePages.map(p => p.id)
+    });
+  };
+
+  const handleClearAllPages = () => {
+    setNewUser({
+      ...newUser,
+      page_permissions: []
+    });
   };
 
   const handleDeleteUser = async (userId) => {
@@ -13449,6 +14032,60 @@ const Settings = () => {
                 />
               </div>
               
+              {/* Page Permissions - Only for non-Admin roles */}
+              {newUser.role !== 'Admin' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Page Access Permissions
+                    </label>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllPages}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-gray-400">|</span>
+                      <button
+                        type="button"
+                        onClick={handleClearAllPages}
+                        className="text-xs text-red-600 hover:text-red-800"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-md p-3 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      {availablePages.map(page => (
+                        <label key={page.id} className="flex items-center space-x-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={(newUser.page_permissions || []).includes(page.id)}
+                            onChange={() => handleTogglePagePermission(page.id)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{page.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Select which pages this user can access. Admin users have access to all pages automatically.
+                  </p>
+                </div>
+              )}
+              
+              {newUser.role === 'Admin' && (
+                <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md p-3">
+                  <p className="text-sm text-blue-800 dark:text-blue-300">
+                    ℹ️ Admin users automatically have access to all pages and features.
+                  </p>
+                </div>
+              )}
+              
               <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
@@ -13654,6 +14291,7 @@ function AppContent() {
             <Route path="/bookings" element={<Bookings />} />
             <Route path="/income-expense" element={<Expenses />} />
             <Route path="/expenses" element={<ExpenseTracking />} />
+            <Route path="/stocks" element={<StocksManagement />} />
             <Route path="/restaurant-expenses" element={<RestaurantExpenses />} />
             <Route path="/commissions" element={<Commissions />} />
             <Route path="/reports" element={<Reports />} />
