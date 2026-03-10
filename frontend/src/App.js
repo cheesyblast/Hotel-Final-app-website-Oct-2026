@@ -70,6 +70,7 @@ const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isSetupCompleted, setIsSetupCompleted] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   // Set axios default authorization header and setup interceptor
   useEffect(() => {
@@ -105,6 +106,7 @@ const AuthProvider = ({ children }) => {
           localStorage.removeItem('token');
           setToken(null);
           setUser(null);
+          setMustChangePassword(false);
           // Show user-friendly message
           if (error.config?.url && !error.config.url.includes('/auth/login')) {
             alert('Your session has expired. Please log in again.');
@@ -163,7 +165,7 @@ const AuthProvider = ({ children }) => {
         password
       });
       
-      const { access_token } = response.data;
+      const { access_token, must_change_password: mustChange } = response.data;
       localStorage.setItem('token', access_token);
       
       // Set authorization header immediately before making the next request
@@ -175,11 +177,33 @@ const AuthProvider = ({ children }) => {
       const userResponse = await axios.get(`${API}/auth/me`);
       setUser(userResponse.data);
       
-      return { success: true };
+      // Check if password change is required
+      if (mustChange) {
+        setMustChangePassword(true);
+        return { success: true, mustChangePassword: true };
+      }
+      
+      return { success: true, mustChangePassword: false };
     } catch (error) {
       return { 
         success: false, 
         error: error.response?.data?.detail || 'Login failed' 
+      };
+    }
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      await axios.post(`${API}/auth/change-password`, {
+        current_password: currentPassword,
+        new_password: newPassword
+      });
+      setMustChangePassword(false);
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Password change failed' 
       };
     }
   };
@@ -195,6 +219,7 @@ const AuthProvider = ({ children }) => {
       localStorage.removeItem('token');
       setToken(null);
       setUser(null);
+      setMustChangePassword(false);
       delete axios.defaults.headers.common['Authorization'];
     }
   };
@@ -218,8 +243,10 @@ const AuthProvider = ({ children }) => {
     loading,
     isSetupCompleted,
     checkingSetup,
+    mustChangePassword,
     login,
     logout,
+    changePassword,
     completeSetup
   };
 
@@ -466,6 +493,10 @@ const LoginPage = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
@@ -482,19 +513,57 @@ const LoginPage = () => {
     setLoading(false);
   };
 
-  const handleForgotPassword = async (e) => {
+  const handleRequestOTP = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setForgotPasswordMessage('');
 
     try {
-      await axios.post(`${API}/auth/forgot-password`, {
-        username_or_email: forgotPasswordEmail
+      await axios.post(`${API}/auth/request-otp`, {
+        email: forgotPasswordEmail
       });
-      setForgotPasswordMessage('If the account exists, a new password has been sent to the registered email.');
+      setForgotPasswordMessage('If the email is registered, an OTP has been sent.');
+      setOtpStep(true);
     } catch (error) {
-      setError(error.response?.data?.detail || 'Failed to send reset email');
+      setError(error.response?.data?.detail || 'Failed to send OTP. Please ensure email settings are configured.');
+    }
+    
+    setLoading(false);
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/auth/verify-otp-reset`, {
+        email: forgotPasswordEmail,
+        otp: otp,
+        new_password: newPassword
+      });
+      alert('Password reset successful! Please login with your new password.');
+      setShowForgotPassword(false);
+      setOtpStep(false);
+      setOtp('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setForgotPasswordEmail('');
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Invalid or expired OTP');
     }
     
     setLoading(false);
@@ -512,8 +581,12 @@ const LoginPage = () => {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-white mb-2">Forgot Password</h1>
-            <p className="text-gray-400">Enter your username or email to reset your password</p>
+            <h1 className="text-3xl font-bold text-white mb-2">
+              {otpStep ? 'Reset Password' : 'Forgot Password'}
+            </h1>
+            <p className="text-gray-400">
+              {otpStep ? 'Enter the OTP sent to your email and your new password' : 'Enter your email to receive an OTP'}
+            </p>
           </div>
 
           {error && (
@@ -522,42 +595,102 @@ const LoginPage = () => {
             </div>
           )}
 
-          {forgotPasswordMessage && (
+          {forgotPasswordMessage && !otpStep && (
             <div className="bg-green-600 text-white p-3 rounded-lg mb-4">
               {forgotPasswordMessage}
             </div>
           )}
 
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            <div>
-              <label className="block text-gray-300 text-sm font-medium mb-2">
-                Username or Email
-              </label>
-              <input
-                type="text"
-                value={forgotPasswordEmail}
-                onChange={(e) => setForgotPasswordEmail(e.target.value)}
-                required
-                className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
-                placeholder="Enter username or email"
-              />
-            </div>
+          {!otpStep ? (
+            <form onSubmit={handleRequestOTP} className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="Enter your registered email"
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Sending...' : 'Send New Password'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Sending OTP...' : 'Send OTP'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOTP} className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  OTP Code
+                </label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                  maxLength={6}
+                  className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 text-center text-xl tracking-widest"
+                  placeholder="Enter 6-digit OTP"
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </form>
+          )}
 
           <div className="mt-4 text-center">
             <button
               onClick={() => {
                 setShowForgotPassword(false);
+                setOtpStep(false);
                 setError('');
                 setForgotPasswordMessage('');
+                setOtp('');
+                setNewPassword('');
+                setConfirmPassword('');
               }}
               className="text-blue-400 hover:text-blue-300 text-sm"
             >
@@ -638,7 +771,53 @@ const LoginPage = () => {
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  const { user, loading, isSetupCompleted, checkingSetup } = useAuth();
+  const { user, loading, isSetupCompleted, checkingSetup, mustChangePassword, changePassword } = useAuth();
+  const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  useEffect(() => {
+    if (mustChangePassword) {
+      setShowPasswordChangeModal(true);
+    }
+  }, [mustChangePassword]);
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters');
+      return;
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    setChangingPassword(true);
+    const result = await changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+    
+    if (result.success) {
+      alert('Password changed successfully!');
+      setShowPasswordChangeModal(false);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } else {
+      setPasswordError(result.error);
+    }
+    setChangingPassword(false);
+  };
 
   if (checkingSetup || loading) {
     return (
@@ -654,6 +833,92 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <LoginPage />;
+  }
+
+  // Show password change modal if required
+  if (showPasswordChangeModal && mustChangePassword) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="text-5xl mb-4">🔐</div>
+            <h1 className="text-2xl font-bold text-white mb-2">Change Your Password</h1>
+            <p className="text-gray-400">For security reasons, you must change your password before continuing.</p>
+          </div>
+
+          {passwordError && (
+            <div className="bg-red-600 text-white p-3 rounded-lg mb-4">
+              {passwordError}
+            </div>
+          )}
+
+          <form onSubmit={handlePasswordChange} className="space-y-4">
+            <div>
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                Current Password
+              </label>
+              <input
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                required
+                className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                placeholder="Enter current password"
+              />
+              <p className="text-xs text-gray-500 mt-1">Default: admin123</p>
+            </div>
+
+            <div>
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                required
+                minLength={8}
+                className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                placeholder="Enter new password (min 8 characters)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                required
+                className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
+                placeholder="Confirm new password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {changingPassword ? 'Changing Password...' : 'Change Password & Continue'}
+            </button>
+          </form>
+
+          <div className="mt-4 p-3 bg-amber-900/30 border border-amber-700 rounded-lg">
+            <p className="text-amber-300 text-sm">
+              <strong>Security Tips:</strong>
+            </p>
+            <ul className="text-amber-200 text-xs mt-1 list-disc list-inside">
+              <li>Use at least 8 characters</li>
+              <li>Mix letters, numbers, and symbols</li>
+              <li>Don't reuse old passwords</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return children;

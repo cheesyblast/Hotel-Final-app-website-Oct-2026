@@ -316,9 +316,10 @@ class User(BaseModel):
     password_hash: str  # Hashed password
     full_name: str
     role: str = "Staff"  # Admin, Manager, Staff, Restaurant Manager
-    email: str = ""
+    email: str  # Required for password recovery
     is_active: bool = True
     page_permissions: List[str] = []  # List of allowed pages - empty means all (for Admin)
+    must_change_password: bool = False  # Force password change on next login
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: Optional[datetime] = None
 
@@ -327,7 +328,7 @@ class UserCreate(BaseModel):
     password: str
     full_name: str
     role: str = "Staff"
-    email: str = ""
+    email: str  # Required
     page_permissions: List[str] = []
 
 class UserLogin(BaseModel):
@@ -342,8 +343,29 @@ class UserResponse(BaseModel):
     email: str
     is_active: bool
     page_permissions: List[str] = []
+    must_change_password: bool = False
     created_at: datetime
     last_login: Optional[datetime] = None
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetVerify(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
+class OTPRecord(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    otp: str
+    expires_at: datetime
+    used: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Token(BaseModel):
     access_token: str
@@ -1632,13 +1654,14 @@ async def complete_setup(setup_request: SetupWizardRequest):
         default_settings = Settings(**settings_update)
         await db.settings.insert_one(default_settings.dict())
     
-    # Create admin user
+    # Create admin user with must_change_password flag
     admin_user = User(
         username="admin",
         password_hash=get_password_hash("admin123"),
         full_name="System Administrator",
         role="Admin",
-        email=setup_request.hotel_email
+        email=setup_request.hotel_email,
+        must_change_password=True  # Force password change on first login
     )
     
     # Check if admin already exists
@@ -1650,7 +1673,8 @@ async def complete_setup(setup_request: SetupWizardRequest):
             {"$set": {
                 "password_hash": get_password_hash("admin123"),
                 "email": setup_request.hotel_email,
-                "full_name": "System Administrator"
+                "full_name": "System Administrator",
+                "must_change_password": True
             }}
         )
     else:
@@ -1726,7 +1750,7 @@ async def complete_setup(setup_request: SetupWizardRequest):
     return {"message": "Setup completed successfully"}
 
 # Authentication Routes
-@api_router.post("/auth/login", response_model=Token)
+@api_router.post("/auth/login")
 async def login(user_credentials: UserLogin):
     """User login"""
     # Find user by username
@@ -1773,7 +1797,18 @@ async def login(user_credentials: UserLogin):
         entity_type="auth"
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "must_change_password": user.get("must_change_password", False),
+        "user": {
+            "id": user.get("id"),
+            "username": user.get("username"),
+            "full_name": user.get("full_name"),
+            "role": user.get("role"),
+            "email": user.get("email", "")
+        }
+    }
 
 @api_router.post("/auth/logout")
 async def logout(current_user: UserResponse = Depends(get_current_user)):
@@ -1791,9 +1826,160 @@ async def get_current_user_info(current_user: UserResponse = Depends(get_current
     """Get current user information"""
     return current_user
 
+# Helper function to generate OTP
+def generate_otp(length: int = 6) -> str:
+    """Generate a numeric OTP"""
+    import random
+    return ''.join([str(random.randint(0, 9)) for _ in range(length)])
+
+@api_router.post("/auth/request-otp")
+async def request_password_reset_otp(request: PasswordResetRequest):
+    """Send OTP to user's email for password reset"""
+    # Find user by email
+    user = await db.users.find_one({"email": request.email})
+    
+    if not user:
+        # Don't reveal if user exists or not for security - but still return success
+        return {"message": "If the email is registered, an OTP has been sent"}
+    
+    # Generate OTP
+    otp = generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=10)  # OTP valid for 10 minutes
+    
+    # Store OTP record
+    otp_record = OTPRecord(
+        email=request.email,
+        otp=otp,
+        expires_at=expires_at
+    )
+    
+    # Remove any existing unused OTPs for this email
+    await db.otp_records.delete_many({"email": request.email, "used": False})
+    
+    # Save new OTP
+    await db.otp_records.insert_one(otp_record.dict())
+    
+    # Send email
+    subject = "Password Reset OTP - Hotel Management System"
+    body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #2563eb;">Password Reset Request</h2>
+        <p>Dear {user.get('full_name', user.get('username'))},</p>
+        <p>You have requested to reset your password. Use the following OTP to complete the process:</p>
+        <div style="background-color: #f3f4f6; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <h1 style="color: #1f2937; letter-spacing: 8px; font-size: 32px; margin: 0;">{otp}</h1>
+        </div>
+        <p style="color: #6b7280;"><strong>This OTP is valid for 10 minutes.</strong></p>
+        <p>If you did not request this password reset, please ignore this email or contact your administrator.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #9ca3af; font-size: 12px;">Hotel Management System</p>
+    </body>
+    </html>
+    """
+    
+    email_sent = await send_email(user["email"], subject, body)
+    
+    if email_sent:
+        await log_activity(
+            action="otp_requested",
+            description=f"Password reset OTP requested for {user['username']}",
+            user_name=user["username"],
+            entity_type="auth"
+        )
+        return {"message": "OTP has been sent to your email"}
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send email. Please ensure email settings are configured correctly."
+        )
+
+@api_router.post("/auth/verify-otp-reset")
+async def verify_otp_and_reset_password(request: PasswordResetVerify):
+    """Verify OTP and reset password"""
+    # Find valid OTP
+    otp_record = await db.otp_records.find_one({
+        "email": request.email,
+        "otp": request.otp,
+        "used": False,
+        "expires_at": {"$gt": datetime.utcnow()}
+    })
+    
+    if not otp_record:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OTP"
+        )
+    
+    # Find user
+    user = await db.users.find_one({"email": request.email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Validate new password
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    
+    # Update password
+    hashed_password = get_password_hash(request.new_password)
+    await db.users.update_one(
+        {"email": request.email},
+        {"$set": {"password_hash": hashed_password, "must_change_password": False}}
+    )
+    
+    # Mark OTP as used
+    await db.otp_records.update_one(
+        {"id": otp_record["id"]},
+        {"$set": {"used": True}}
+    )
+    
+    await log_activity(
+        action="password_reset_otp",
+        description=f"Password reset via OTP for user {user['username']}",
+        user_name=user["username"],
+        entity_type="auth"
+    )
+    
+    return {"message": "Password has been reset successfully"}
+
+@api_router.post("/auth/change-password")
+async def change_password(request: PasswordChangeRequest, current_user: UserResponse = Depends(get_current_user)):
+    """Change password for logged-in user"""
+    # Get user from database
+    user = await db.users.find_one({"username": current_user.username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current password
+    if not verify_password(request.current_password, user.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Validate new password
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    
+    if request.current_password == request.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    
+    # Update password
+    hashed_password = get_password_hash(request.new_password)
+    await db.users.update_one(
+        {"username": current_user.username},
+        {"$set": {"password_hash": hashed_password, "must_change_password": False}}
+    )
+    
+    await log_activity(
+        action="password_changed",
+        description=f"Password changed for user {current_user.username}",
+        user_name=current_user.username,
+        entity_type="auth"
+    )
+    
+    return {"message": "Password changed successfully"}
+
 @api_router.post("/auth/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest):
-    """Send new password to user's email"""
+    """Send new password to user's email (legacy - use request-otp instead)"""
     # Find user by username or email
     user = await db.users.find_one({
         "$or": [
@@ -1816,10 +2002,10 @@ async def forgot_password(request: ForgotPasswordRequest):
     new_password = generate_random_password()
     hashed_password = get_password_hash(new_password)
     
-    # Update user password
+    # Update user password and set must_change_password flag
     await db.users.update_one(
         {"id": user["id"]},
-        {"$set": {"password_hash": hashed_password}}
+        {"$set": {"password_hash": hashed_password, "must_change_password": True}}
     )
     
     # Send email
@@ -2332,6 +2518,15 @@ async def create_user(user: UserCreate, current_user: UserResponse = Depends(get
     existing_user = await db.users.find_one({"username": user.username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Validate email is provided
+    if not user.email or not user.email.strip():
+        raise HTTPException(status_code=400, detail="Email is required for password recovery")
+    
+    # Check if email already exists
+    existing_email = await db.users.find_one({"email": user.email})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already in use by another user")
     
     # Hash password
     hashed_password = get_password_hash(user.password)
