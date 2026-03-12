@@ -6040,7 +6040,7 @@ async def create_restaurant_order(
     await db.restaurant_orders.insert_one(order_dict)
     
     # Deduct stock for items with stock tracking enabled
-    order_items_for_stock = [{"item_id": item.item_id, "name": item.name, "quantity": item.quantity} for item in order.items]
+    order_items_for_stock = [{"item_id": item.menu_item_id, "name": item.menu_item_name, "quantity": item.quantity} for item in order.items]
     await deduct_stock_for_order(order_items_for_stock, new_order.id, current_user.username)
     
     # NOTE: Restaurant charges are ONLY added to room bill when the user explicitly

@@ -966,6 +966,7 @@ const RealTimeClock = () => {
 const Dashboard = () => {
   const [rooms, setRooms] = useState([]);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [upcomingBookingsPage, setUpcomingBookingsPage] = useState(1);
   const [checkedInCustomers, setCheckedInCustomers] = useState([]);
   const [roomsPendingCleaning, setRoomsPendingCleaning] = useState([]);
   const [cleaningStaff, setCleaningStaff] = useState([]);
@@ -2174,13 +2175,18 @@ const Dashboard = () => {
 
       {/* Upcoming Bookings */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Recent Upcoming Bookings</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white" data-testid="upcoming-bookings-title">
+            Upcoming Bookings {upcomingBookings.length > 0 && <span className="text-sm font-normal text-gray-400">({upcomingBookings.length} total)</span>}
+          </h3>
+        </div>
         <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 overflow-x-auto" style={{minHeight: '300px'}}>
           {upcomingBookings.length === 0 ? (
             <div className="p-6 text-center text-gray-400">
               No upcoming bookings
             </div>
           ) : (
+            <>
             <table className="min-w-full divide-y divide-gray-700">
               <thead className="bg-gray-700">
                 <tr>
@@ -2193,7 +2199,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {upcomingBookings.map((booking) => (
+                {upcomingBookings.slice((upcomingBookingsPage - 1) * 10, upcomingBookingsPage * 10).map((booking) => (
                   <tr key={booking.id} className="hover:bg-gray-700">
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                       <div className="text-xs sm:text-sm font-medium text-white">{booking.guest_name}</div>
@@ -2257,11 +2263,39 @@ const Dashboard = () => {
                 ))}
               </tbody>
             </table>
+            {/* Pagination for upcoming bookings */}
+            {upcomingBookings.length > 10 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700" data-testid="upcoming-bookings-pagination">
+                <span className="text-sm text-gray-400">
+                  Showing {((upcomingBookingsPage - 1) * 10) + 1}-{Math.min(upcomingBookingsPage * 10, upcomingBookings.length)} of {upcomingBookings.length}
+                </span>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setUpcomingBookingsPage(p => Math.max(1, p - 1))}
+                    disabled={upcomingBookingsPage === 1}
+                    className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="upcoming-bookings-prev"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-300">
+                    Page {upcomingBookingsPage} / {Math.ceil(upcomingBookings.length / 10)}
+                  </span>
+                  <button
+                    onClick={() => setUpcomingBookingsPage(p => Math.min(Math.ceil(upcomingBookings.length / 10), p + 1))}
+                    disabled={upcomingBookingsPage >= Math.ceil(upcomingBookings.length / 10)}
+                    className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="upcoming-bookings-next"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
-
-      {/* Checked-in Customers */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-white mb-4">Checked-in Customers</h3>
         <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 overflow-x-auto">
@@ -5830,7 +5864,7 @@ const Expenses = () => {
                         <div className="text-sm text-white">{expense.expense_date}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{expense.created_by}</div>
+                        <div className="text-sm text-gray-300">{expense.created_by}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
@@ -5851,44 +5885,44 @@ const Expenses = () => {
       </div>
 
       {/* Income Records Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Income Records</h3>
+      <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-6 mb-8">
+        <h3 className="text-lg font-semibold text-white mb-4">Income Records</h3>
         
         {/* Room Bookings Income */}
         <div className="mb-6">
-          <h4 className="text-md font-medium text-green-800 dark:text-green-400 mb-3">Room Bookings</h4>
+          <h4 className="text-md font-medium text-green-400 mb-3">Room Bookings</h4>
           {dailySales && dailySales.length > 0 ? (
             <div>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-green-50 dark:bg-green-900">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-green-900">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wider">Guest</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wider">Room</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wider">Payment Method</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Guest</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Room</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Payment Method</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
                     {getPaginatedData(dailySales, roomBookingsPage).map((sale, index) => (
-                      <tr key={index}>
+                      <tr key={index} className="hover:bg-gray-700">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">
+                          <div className="text-sm text-gray-300">
                             {new Date(sale.date).toLocaleDateString()}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">{sale.customer_name}</div>
+                          <div className="text-sm text-gray-300">{sale.customer_name}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">{sale.room_number}</div>
+                          <div className="text-sm text-gray-300">{sale.room_number}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">{sale.payment_method}</div>
+                          <div className="text-sm text-gray-300">{sale.payment_method}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-bold text-green-600 dark:text-green-400">LKR {sale.total_amount.toFixed(2)}</div>
+                          <div className="text-sm font-bold text-green-400">LKR {sale.total_amount.toFixed(2)}</div>
                         </td>
                       </tr>
                     ))}
@@ -5898,7 +5932,7 @@ const Expenses = () => {
               {renderPagination(dailySales, roomBookingsPage, setRoomBookingsPage)}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div className="text-center py-8 text-gray-400">
               No room booking income recorded
             </div>
           )}
@@ -5906,36 +5940,36 @@ const Expenses = () => {
 
         {/* Additional Income */}
         <div>
-          <h4 className="text-md font-medium text-blue-800 dark:text-blue-400 mb-3">Additional Income</h4>
+          <h4 className="text-md font-medium text-blue-400 mb-3">Additional Income</h4>
           {incomes && incomes.length > 0 ? (
             <div>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-blue-50 dark:bg-blue-900">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-blue-900">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">Description</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wider">Action</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Description</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
                     {getPaginatedData(incomes, additionalIncomePage).map((income, index) => (
-                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr key={index} className="hover:bg-gray-700">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">
+                          <div className="text-sm text-gray-300">
                             {new Date(income.income_date).toLocaleDateString()}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-300">{income.description}</div>
+                          <div className="text-sm text-gray-300">{income.description}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-700 dark:text-gray-400">{income.category}</div>
+                          <div className="text-sm text-gray-400">{income.category}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-bold text-green-600 dark:text-green-400">LKR {income.amount.toFixed(2)}</div>
+                          <div className="text-sm font-bold text-green-400">LKR {income.amount.toFixed(2)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
@@ -5963,25 +5997,25 @@ const Expenses = () => {
       {/* Add Expense Modal */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Add New Expense</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-4">Add New Expense</h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Description *
                 </label>
                 <input
                   type="text"
                   value={expenseData.description}
                   onChange={(e) => setExpenseData({...expenseData, description: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter expense description"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Amount (LKR) *
                 </label>
                 <input
@@ -5989,19 +6023,19 @@ const Expenses = () => {
                   step="0.01"
                   value={expenseData.amount}
                   onChange={(e) => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Category *
                 </label>
                 <select
                   value={expenseData.category}
                   onChange={(e) => setExpenseData({...expenseData, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
                   <option value="">Select category</option>
@@ -6014,33 +6048,33 @@ const Expenses = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Payment Method *
                 </label>
                 <select
                   value={expenseData.payment_method}
                   onChange={(e) => setExpenseData({...expenseData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
                   {paymentMethods.map(method => (
                     <option key={method} value={method}>{method}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   This will deduct from {expenseData.payment_method === 'Cash' ? 'Cash Balance' : 'Bank Balance'}
                 </p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Date *
                 </label>
                 <input
                   type="date"
                   value={expenseData.expense_date}
                   onChange={(e) => setExpenseData({...expenseData, expense_date: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -6048,7 +6082,7 @@ const Expenses = () => {
             <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => setShowAddExpenseModal(false)}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
               >
                 Cancel
               </button>
@@ -6066,25 +6100,25 @@ const Expenses = () => {
       {/* Add Income Modal */}
       {showAddIncomeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Add New Income</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-4">Add New Income</h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Description *
                 </label>
                 <input
                   type="text"
                   value={incomeData.description}
                   onChange={(e) => setIncomeData({...incomeData, description: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Enter income description"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Amount (LKR) *
                 </label>
                 <input
@@ -6092,19 +6126,19 @@ const Expenses = () => {
                   step="0.01"
                   value={incomeData.amount}
                   onChange={(e) => setIncomeData({...incomeData, amount: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="0.00"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Category *
                 </label>
                 <select
                   value={incomeData.category}
                   onChange={(e) => setIncomeData({...incomeData, category: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 >
                   <option value="">Select category</option>
@@ -6117,31 +6151,31 @@ const Expenses = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Payment Method *</label>
                 <select
                   value={incomeData.payment_method}
                   onChange={(e) => setIncomeData({...incomeData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 >
                   {paymentMethods.map(method => (
                     <option key={method} value={method}>{method}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   This will add to {incomeData.payment_method === 'Cash' ? 'Cash Balance' : 'Bank Balance'}
                 </p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Date *
                 </label>
                 <input
                   type="date"
                   value={incomeData.income_date}
                   onChange={(e) => setIncomeData({...incomeData, income_date: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
             </div>
@@ -6149,7 +6183,7 @@ const Expenses = () => {
             <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => setShowAddIncomeModal(false)}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
               >
                 Cancel
               </button>
