@@ -4476,6 +4476,69 @@ const CalendarView = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Room Summary Section */}
+                  {(() => {
+                    const activeBookings = selectedDateBookings.filter(b => b.status !== 'Cancelled');
+                    const cancelledBookings = selectedDateBookings.filter(b => b.status === 'Cancelled');
+                    const bookedRooms = [...new Set(activeBookings.map(b => b.room_number))].sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+                    const cancelledRooms = [...new Set(cancelledBookings.map(b => b.room_number))].sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+                    const availableRooms = rooms.filter(r => !bookedRooms.includes(r.room_number)).map(r => r.room_number).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
+                    
+                    return (
+                      <div className="mb-4 space-y-2" data-testid="calendar-room-summary">
+                        {/* Occupied Rooms */}
+                        {bookedRooms.length > 0 && (
+                          <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-blue-300 text-sm font-semibold">Occupied Rooms ({bookedRooms.length})</span>
+                              <span className="text-blue-400 text-xs">{activeBookings.length} booking{activeBookings.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {bookedRooms.map(room => (
+                                <span key={room} className="bg-blue-600 text-white text-xs px-2 py-1 rounded font-mono" data-testid={`occupied-room-${room}`}>
+                                  {room}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Cancelled Rooms */}
+                        {cancelledRooms.length > 0 && (
+                          <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-red-300 text-sm font-semibold">Cancelled ({cancelledBookings.length})</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {cancelledRooms.map(room => (
+                                <span key={room} className="bg-red-600/60 text-red-200 text-xs px-2 py-1 rounded font-mono line-through">
+                                  {room}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Available Rooms */}
+                        {availableRooms.length > 0 && (
+                          <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-gray-300 text-sm font-semibold">Available Rooms ({availableRooms.length})</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {availableRooms.map(room => (
+                                <span key={room} className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded font-mono" data-testid={`available-room-${room}`}>
+                                  {room}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Individual Booking Cards */}
                   {selectedDateBookings.map((booking, index) => {
                     const isCancelled = booking.status === 'Cancelled';
                     return (
@@ -4518,19 +4581,36 @@ const CalendarView = () => {
                               <p className="text-white font-mono">{booking.id?.substring(0, 8) || 'N/A'}...</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">Room</p>
-                              <p className="text-white font-semibold">{booking.room_number}</p>
+                              <p className="text-gray-500">Room Number</p>
+                              <p className="text-white font-semibold text-lg">{booking.room_number}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-500">Arrival</p>
+                              <p className="text-white">{new Date(booking.check_in_date).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Departure</p>
+                              <p className="text-white">{new Date(booking.check_out_date).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Nights</p>
+                              <p className="text-white font-semibold">
+                                {Math.ceil((new Date(booking.check_out_date) - new Date(booking.check_in_date)) / (1000 * 60 * 60 * 24))}
+                              </p>
                             </div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="text-gray-500">Arrival date</p>
-                              <p className="text-white">{new Date(booking.check_in_date).toLocaleDateString()}</p>
+                              <p className="text-gray-500">Guests</p>
+                              <p className="text-white">{booking.number_of_guests || booking.num_guests || 1} guest{(booking.number_of_guests || booking.num_guests || 1) !== 1 ? 's' : ''}</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">Departure date</p>
-                              <p className="text-white">{new Date(booking.check_out_date).toLocaleDateString()}</p>
+                              <p className="text-gray-500">Amount</p>
+                              <p className={`font-semibold ${isCancelled ? 'text-red-400 line-through' : 'text-green-400'}`}>LKR {booking.booking_amount?.toLocaleString() || '0'}</p>
                             </div>
                           </div>
 
@@ -4540,8 +4620,8 @@ const CalendarView = () => {
                               <p className="text-white">{booking.guest_phone || 'N/A'}</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">Amount</p>
-                              <p className={`font-semibold ${isCancelled ? 'text-red-400 line-through' : 'text-green-400'}`}>LKR {booking.booking_amount?.toLocaleString() || '0'}</p>
+                              <p className="text-gray-500">Guest email</p>
+                              <p className="text-white">{booking.guest_email || 'N/A'}</p>
                             </div>
                           </div>
 
@@ -10548,8 +10628,11 @@ const StocksManagement = () => {
   const [activeTab, setActiveTab] = useState('all'); // all, restaurant, maintenance, transactions
   const [showAddStockModal, setShowAddStockModal] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
   
   const [stockForm, setStockForm] = useState({
     item_name: '',
@@ -10559,6 +10642,9 @@ const StocksManagement = () => {
     current_stock: 0,
     low_stock_threshold: 10,
     cost_per_unit: 0,
+    selling_price: 0,
+    add_to_menu: true, // Auto-add restaurant items to menu
+    menu_category_id: '',
     linked_menu_item_id: ''
   });
   
@@ -10568,7 +10654,7 @@ const StocksManagement = () => {
     transaction_type: 'add'
   });
 
-  const categories = {
+  const stockCategories = {
     restaurant: ['Beverages', 'Food Items', 'Snacks', 'Dairy', 'Vegetables', 'Meat', 'General'],
     maintenance: ['Linens', 'Toiletries', 'Cleaning Supplies', 'Electrical', 'Plumbing', 'Furniture', 'General']
   };
@@ -10580,6 +10666,7 @@ const StocksManagement = () => {
     fetchTransactions();
     fetchSummary();
     fetchMenuItems();
+    fetchMenuCategories();
   }, []);
 
   const fetchStocks = async () => {
@@ -10613,25 +10700,90 @@ const StocksManagement = () => {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await axios.get(`${API}/restaurant/menu`);
+      const response = await axios.get(`${API}/restaurant/menu-items`);
       setMenuItems(response.data);
     } catch (error) {
       console.error('Error fetching menu items:', error);
     }
   };
 
+  const fetchMenuCategories = async () => {
+    try {
+      const response = await axios.get(`${API}/restaurant/categories`);
+      setMenuCategories(response.data);
+    } catch (error) {
+      console.error('Error fetching menu categories:', error);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    try {
+      await axios.post(`${API}/restaurant/categories`, { name: newCategoryName.trim() });
+      setNewCategoryName('');
+      setShowAddCategoryModal(false);
+      fetchMenuCategories();
+      alert('Category added successfully!');
+    } catch (error) {
+      alert('Error adding category: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
   const handleAddStock = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API}/stocks`, stockForm);
-      alert('Stock item added successfully!');
+      // First create the stock item
+      const stockResponse = await axios.post(`${API}/stocks`, {
+        item_name: stockForm.item_name,
+        item_type: stockForm.item_type,
+        category: stockForm.category,
+        unit: stockForm.unit,
+        current_stock: stockForm.current_stock,
+        low_stock_threshold: stockForm.low_stock_threshold,
+        cost_per_unit: stockForm.cost_per_unit
+      });
+      
+      const newStockId = stockResponse.data.stock?.id;
+      
+      // If restaurant item and add_to_menu is checked, create menu item
+      if (stockForm.item_type === 'restaurant' && stockForm.add_to_menu && stockForm.menu_category_id && stockForm.selling_price > 0) {
+        try {
+          const menuResponse = await axios.post(`${API}/restaurant/menu-items`, {
+            name: stockForm.item_name,
+            description: `${stockForm.category} item`,
+            price: stockForm.selling_price,
+            category_id: stockForm.menu_category_id,
+            is_vegetarian: false,
+            is_spicy: false,
+            track_stock: true,
+            stock_item_id: newStockId
+          });
+          
+          // Update stock item with linked menu item ID
+          if (menuResponse.data.id && newStockId) {
+            await axios.put(`${API}/stocks/${newStockId}`, {
+              linked_menu_item_id: menuResponse.data.id
+            });
+          }
+          
+          alert('Stock item added and linked to restaurant menu!');
+        } catch (menuError) {
+          console.error('Error adding to menu:', menuError);
+          alert('Stock item added, but failed to add to menu: ' + (menuError.response?.data?.detail || menuError.message));
+        }
+      } else {
+        alert('Stock item added successfully!');
+      }
+      
       setShowAddStockModal(false);
       setStockForm({
         item_name: '', item_type: 'restaurant', category: 'General', unit: 'pcs',
-        current_stock: 0, low_stock_threshold: 10, cost_per_unit: 0, linked_menu_item_id: ''
+        current_stock: 0, low_stock_threshold: 10, cost_per_unit: 0, selling_price: 0,
+        add_to_menu: true, menu_category_id: '', linked_menu_item_id: ''
       });
       fetchStocks();
       fetchSummary();
+      fetchMenuItems();
     } catch (error) {
       alert('Error adding stock: ' + (error.response?.data?.detail || error.message));
     }
@@ -10917,7 +11069,7 @@ const StocksManagement = () => {
                   <label className="block text-sm font-medium text-gray-300 mb-1">Type *</label>
                   <select
                     value={stockForm.item_type}
-                    onChange={(e) => setStockForm({...stockForm, item_type: e.target.value, category: 'General'})}
+                    onChange={(e) => setStockForm({...stockForm, item_type: e.target.value, category: 'General', add_to_menu: e.target.value === 'restaurant'})}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
                   >
                     <option value="restaurant">Restaurant</option>
@@ -10925,13 +11077,13 @@ const StocksManagement = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Stock Category</label>
                   <select
                     value={stockForm.category}
                     onChange={(e) => setStockForm({...stockForm, category: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
                   >
-                    {categories[stockForm.item_type]?.map(cat => (
+                    {stockCategories[stockForm.item_type]?.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
@@ -10986,20 +11138,98 @@ const StocksManagement = () => {
                 </div>
               </div>
 
+              {/* Restaurant-specific options */}
               {stockForm.item_type === 'restaurant' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Link to Menu Item (for auto-deduct)</label>
-                  <select
-                    value={stockForm.linked_menu_item_id}
-                    onChange={(e) => setStockForm({...stockForm, linked_menu_item_id: e.target.value})}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-                  >
-                    <option value="">-- None (manual only) --</option>
-                    {menuItems.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">Stock will auto-deduct when this menu item is sold</p>
+                <>
+                  <div className="border-t border-gray-600 pt-4 mt-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={stockForm.add_to_menu}
+                        onChange={(e) => setStockForm({...stockForm, add_to_menu: e.target.checked})}
+                        className="w-5 h-5 rounded border-gray-500 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="text-white font-medium">Add to Restaurant Menu</span>
+                    </label>
+                    <p className="text-xs text-gray-400 mt-1 ml-8">Automatically create a menu item that links to this stock</p>
+                  </div>
+
+                  {stockForm.add_to_menu && (
+                    <div className="space-y-4 bg-gray-700/50 rounded-lg p-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-medium text-gray-300">Menu Category *</label>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddCategoryModal(true)}
+                            className="text-xs text-teal-400 hover:text-teal-300"
+                          >
+                            + Add New Category
+                          </button>
+                        </div>
+                        <select
+                          value={stockForm.menu_category_id}
+                          onChange={(e) => setStockForm({...stockForm, menu_category_id: e.target.value})}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                          required={stockForm.add_to_menu}
+                        >
+                          <option value="">-- Select Menu Category --</option>
+                          {menuCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Selling Price (LKR) *</label>
+                        <input
+                          type="number"
+                          value={stockForm.selling_price}
+                          onChange={(e) => setStockForm({...stockForm, selling_price: parseFloat(e.target.value) || 0})}
+                          min="0"
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                          placeholder="Price for customers"
+                          required={stockForm.add_to_menu}
+                        />
+                        {stockForm.cost_per_unit > 0 && stockForm.selling_price > 0 && (
+                          <p className="text-xs text-green-400 mt-1">
+                            Profit margin: LKR {(stockForm.selling_price - stockForm.cost_per_unit).toLocaleString()} 
+                            ({((stockForm.selling_price - stockForm.cost_per_unit) / stockForm.cost_per_unit * 100).toFixed(1)}%)
+                          </p>
+                        )}
+                      </div>
+                      <div className="bg-blue-900/30 border border-blue-700 rounded-md p-3">
+                        <p className="text-sm text-blue-300">
+                          Stock will automatically reduce when this item is sold in the restaurant.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!stockForm.add_to_menu && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Link to Existing Menu Item</label>
+                      <select
+                        value={stockForm.linked_menu_item_id}
+                        onChange={(e) => setStockForm({...stockForm, linked_menu_item_id: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                      >
+                        <option value="">-- None (manual stock only) --</option>
+                        {menuItems.map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">Stock will auto-deduct when this menu item is sold</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Maintenance-specific info */}
+              {stockForm.item_type === 'maintenance' && (
+                <div className="bg-amber-900/30 border border-amber-700 rounded-md p-3">
+                  <p className="text-sm text-amber-300">
+                    <strong>Maintenance items</strong> are managed manually. Use the +/- buttons to add stock when purchased or remove when items are damaged/lost.
+                  </p>
                 </div>
               )}
 
@@ -11072,6 +11302,44 @@ const StocksManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm" data-testid="add-category-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Add Menu Category</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  placeholder="e.g., Main Course, Beverages"
+                  data-testid="category-name-input"
+                />
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!newCategoryName.trim()}
+                  className="flex-1 bg-teal-600 text-white py-2 px-4 rounded-md hover:bg-teal-700 disabled:opacity-50"
+                  data-testid="save-category-btn"
+                >
+                  Add Category
+                </button>
+                <button
+                  onClick={() => { setShowAddCategoryModal(false); setNewCategoryName(''); }}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -14293,8 +14561,10 @@ const Settings = () => {
                   value={newUser.email}
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter email (optional)"
+                  placeholder="Enter email (required for password recovery)"
+                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">Required for password recovery</p>
               </div>
               
               {/* Page Permissions - Only for non-Admin roles */}
