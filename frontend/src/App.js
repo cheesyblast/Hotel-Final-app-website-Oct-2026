@@ -1059,6 +1059,8 @@ const Dashboard = () => {
     guest_phone: '',
     country: '',
     guest_id_passport: '',
+    guest_id_proof: '',
+    guest_id_proof_filename: '',
     room_number: '',
     check_in_date: '',
     check_out_date: '',
@@ -1633,7 +1635,7 @@ const Dashboard = () => {
 
   const handleCheckin = async (booking) => {
     setSelectedBooking(booking);
-    setCheckinData({ advance_amount: 0, notes: '', payment_method: 'Cash' });
+    setCheckinData({ advance_amount: 0, notes: '', payment_method: 'Cash', new_room_number: '' });
     setShowCheckinModal(true);
   };
 
@@ -1643,7 +1645,8 @@ const Dashboard = () => {
         booking_id: selectedBooking.id,
         advance_amount: checkinData.advance_amount,
         notes: checkinData.notes,
-        payment_method: checkinData.payment_method
+        payment_method: checkinData.payment_method,
+        new_room_number: checkinData.new_room_number || null
       });
       
       setShowCheckinModal(false);
@@ -1686,6 +1689,30 @@ const Dashboard = () => {
     const additionalAmount = parseFloat(checkoutData.additional_amount) || 0;
     const discountAmount = parseFloat(checkoutData.discount_amount) || 0;
     return roomCharges + restaurantCharges + additionalAmount - advanceAmount - discountAmount;
+  };
+
+  const handlePdfUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert('Only PDF files are allowed');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewBookingData(prev => ({
+        ...prev,
+        guest_id_proof: reader.result.split(',')[1], // base64 without prefix
+        guest_id_proof_filename: file.name
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleNewBooking = async () => {
@@ -1757,6 +1784,8 @@ const Dashboard = () => {
         guest_phone: '',
         guest_country: '',
         guest_id_passport: '',
+        guest_id_proof: '',
+        guest_id_proof_filename: '',
         room_number: '',
         check_in_date: '',
         check_out_date: '',
@@ -2656,30 +2685,30 @@ const Dashboard = () => {
       {/* Check-in Modal */}
       {showCheckinModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Check In Customer</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" data-testid="checkin-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Check In Customer</h3>
             {selectedBooking && (
               <div className="mb-4 space-y-2">
-                <p className="text-sm text-gray-600">Guest: <span className="font-medium text-gray-800">{selectedBooking.guest_name}</span></p>
-                <p className="text-sm text-gray-600">Room: <span className="font-medium text-gray-800">{selectedBooking.room_number}</span></p>
-                <p className="text-sm text-gray-600">Phone: <span className="font-medium text-gray-800">{selectedBooking.guest_phone}</span></p>
-                <p className="text-sm text-gray-600">Check-in: <span className="font-medium text-gray-800">{selectedBooking.check_in_date}</span></p>
-                <p className="text-sm text-gray-600">Check-out: <span className="font-medium text-gray-800">{selectedBooking.check_out_date}</span></p>
+                <p className="text-sm text-gray-400">Guest: <span className="font-medium text-white">{selectedBooking.guest_name}</span></p>
+                <p className="text-sm text-gray-400">Booked Room: <span className="font-medium text-white">{selectedBooking.room_number}</span></p>
+                <p className="text-sm text-gray-400">Phone: <span className="font-medium text-white">{selectedBooking.guest_phone}</span></p>
+                <p className="text-sm text-gray-400">Check-in: <span className="font-medium text-white">{selectedBooking.check_in_date}</span></p>
+                <p className="text-sm text-gray-400">Check-out: <span className="font-medium text-white">{selectedBooking.check_out_date}</span></p>
                 
                 {/* Booking Amount Summary */}
-                <div className="mt-3 pt-3 border-t border-gray-200 bg-blue-50 rounded-md p-3">
-                  <h4 className="font-medium text-blue-800 mb-2">Booking Amount</h4>
+                <div className="mt-3 pt-3 border-t border-gray-700 bg-blue-900/30 rounded-md p-3">
+                  <h4 className="font-medium text-blue-300 mb-2">Booking Amount</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Rate per Night:</span>
-                      <span className="font-medium text-gray-800">LKR {(selectedBooking.rate_per_night || 0).toLocaleString()}</span>
+                      <span className="text-gray-400">Rate per Night:</span>
+                      <span className="font-medium text-white">LKR {(selectedBooking.rate_per_night || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total Room Charges:</span>
-                      <span className="font-medium text-gray-800">LKR {(selectedBooking.booking_amount || 0).toLocaleString()}</span>
+                      <span className="text-gray-400">Total Room Charges:</span>
+                      <span className="font-medium text-white">LKR {(selectedBooking.booking_amount || 0).toLocaleString()}</span>
                     </div>
                     {selectedBooking.commission_amount > 0 && (
-                      <div className="flex justify-between text-orange-600">
+                      <div className="flex justify-between text-orange-400">
                         <span>Commission ({selectedBooking.booking_channel_name}):</span>
                         <span>LKR {selectedBooking.commission_amount.toLocaleString()}</span>
                       </div>
@@ -2689,27 +2718,48 @@ const Dashboard = () => {
               </div>
             )}
             <div className="space-y-4">
+              {/* Room Change Option */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Change Room (Optional)
+                </label>
+                <select
+                  value={checkinData.new_room_number}
+                  onChange={(e) => setCheckinData({...checkinData, new_room_number: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-testid="checkin-room-change"
+                >
+                  <option value="">Keep original room ({selectedBooking?.room_number})</option>
+                  {rooms.filter(r => r.status === 'Available' && r.room_number !== selectedBooking?.room_number).map(r => (
+                    <option key={r.room_number} value={r.room_number}>
+                      Room {r.room_number} - {r.room_type || 'Standard'}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Select a different available room if guest prefers</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Advance Amount (LKR)
                 </label>
                 <input
                   type="number"
                   value={checkinData.advance_amount}
                   onChange={(e) => setCheckinData({...checkinData, advance_amount: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Payment Method
                 </label>
                 <select
                   value={checkinData.payment_method}
                   onChange={(e) => setCheckinData({...checkinData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Card">Card</option>
@@ -2718,13 +2768,13 @@ const Dashboard = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Notes
                 </label>
                 <textarea
                   value={checkinData.notes}
                   onChange={(e) => setCheckinData({...checkinData, notes: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows="3"
                   placeholder="Any special notes..."
                 />
@@ -2733,13 +2783,14 @@ const Dashboard = () => {
             <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => setShowCheckinModal(false)}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmCheckin}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                data-testid="confirm-checkin-btn"
               >
                 Confirm Check In
               </button>
@@ -3343,6 +3394,38 @@ const Dashboard = () => {
                     </datalist>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">Start typing to search countries</p>
+                </div>
+
+                {/* ID Proof Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Upload ID / Passport (PDF)
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={handlePdfUpload}
+                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      data-testid="booking-pdf-upload"
+                    />
+                  </div>
+                  {newBookingData.guest_id_proof_filename && (
+                    <div className="mt-1 flex items-center text-xs text-green-600">
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {newBookingData.guest_id_proof_filename}
+                      <button
+                        type="button"
+                        onClick={() => setNewBookingData(prev => ({...prev, guest_id_proof: '', guest_id_proof_filename: ''}))}
+                        className="ml-2 text-red-500 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">Max 5MB PDF file</p>
                 </div>
               </div>
               
@@ -6284,13 +6367,14 @@ const Guests = () => {
     }
   };
 
-  const fetchGuestDetails = async (guestEmail) => {
+  const fetchGuestDetails = async (guestId) => {
     try {
-      const response = await axios.get(`${API}/guests/${guestEmail}`);
+      const response = await axios.get(`${API}/guests/${encodeURIComponent(guestId)}`);
       setSelectedGuest(response.data);
       setShowGuestDetails(true);
     } catch (error) {
       console.error('Error fetching guest details:', error);
+      alert('Could not load guest details.');
     }
   };
 
@@ -6619,7 +6703,7 @@ const Guests = () => {
                           <div className="absolute right-0 mt-1 w-40 bg-gray-700 rounded-md shadow-lg z-20 border border-gray-600">
                             <button
                               onClick={() => {
-                                fetchGuestDetails(guest.email);
+                                fetchGuestDetails(guest.id);
                                 setActiveDropdown(null);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-600 flex items-center"
@@ -6905,75 +6989,153 @@ const Guests = () => {
       {/* Guest Details Modal */}
       {showGuestDetails && selectedGuest && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="guest-details-modal">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold">Guest Details</h3>
+              <h3 className="text-lg font-semibold text-white">Guest Details</h3>
               <button
                 onClick={() => setShowGuestDetails(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-200"
               >
-                ✕
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             
             <div className="mb-6">
-              <h4 className="text-lg font-medium text-gray-900 mb-2">{selectedGuest.name}</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <h4 className="text-lg font-medium text-white mb-2">{selectedGuest.name}</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">Email:</span>
-                  <span className="ml-2 text-gray-900">{selectedGuest.email}</span>
+                  <span className="text-gray-400">Email:</span>
+                  <span className="ml-2 text-gray-200">{selectedGuest.email || 'Not provided'}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Phone:</span>
-                  <span className="ml-2 text-gray-900">{selectedGuest.phone}</span>
+                  <span className="text-gray-400">Phone:</span>
+                  <span className="ml-2 text-gray-200">{selectedGuest.phone || 'Not provided'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Country:</span>
+                  <span className="ml-2 text-gray-200">{selectedGuest.country || 'Not provided'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">ID/Passport:</span>
+                  <span className="ml-2 text-gray-200">{selectedGuest.id_passport || 'Not provided'}</span>
                 </div>
               </div>
             </div>
 
+            {/* ID Proof Section */}
+            <div className="mb-6 p-4 bg-gray-700 rounded-lg" data-testid="guest-proof-section">
+              <h4 className="text-md font-medium text-white mb-3">ID / Passport Proof</h4>
+              {selectedGuest.id_proof ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <div>
+                      <p className="text-white text-sm font-medium">{selectedGuest.id_proof_filename || 'document.pdf'}</p>
+                      <p className="text-gray-400 text-xs">PDF Document</p>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = `data:application/pdf;base64,${selectedGuest.id_proof}`;
+                        link.download = selectedGuest.id_proof_filename || 'id_proof.pdf';
+                        link.click();
+                      }}
+                      className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+                      data-testid="download-proof-btn"
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('Delete this ID proof?')) return;
+                        try {
+                          const guestId = selectedGuest.email && selectedGuest.email !== 'Not provided' ? selectedGuest.email : guests.find(g => g.name === selectedGuest.name)?.id;
+                          await axios.delete(`${API}/guests/delete-proof/${encodeURIComponent(guestId)}`);
+                          setSelectedGuest(prev => ({...prev, id_proof: '', id_proof_filename: ''}));
+                          alert('ID proof deleted successfully');
+                        } catch (error) {
+                          alert('Error deleting proof: ' + (error.response?.data?.detail || error.message));
+                        }
+                      }}
+                      className="bg-red-600 text-white px-3 py-1.5 rounded text-sm hover:bg-red-700"
+                      data-testid="delete-proof-btn"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-400 text-sm mb-3">No ID proof uploaded</p>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        if (file.type !== 'application/pdf') { alert('Only PDF files allowed'); return; }
+                        if (file.size > 5 * 1024 * 1024) { alert('Max 5MB'); return; }
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          try {
+                            const base64 = reader.result.split(',')[1];
+                            const guestId = selectedGuest.email && selectedGuest.email !== 'Not provided' ? selectedGuest.email : guests.find(g => g.name === selectedGuest.name)?.id;
+                            await axios.post(`${API}/guests/upload-proof`, {
+                              guest_id: guestId,
+                              id_proof: base64,
+                              id_proof_filename: file.name
+                            });
+                            setSelectedGuest(prev => ({...prev, id_proof: base64, id_proof_filename: file.name}));
+                            alert('ID proof uploaded successfully');
+                          } catch (error) {
+                            alert('Error uploading: ' + (error.response?.data?.detail || error.message));
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                      data-testid="upload-proof-input"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
-              <h4 className="text-lg font-medium text-gray-900 mb-4">Booking History</h4>
+              <h4 className="text-lg font-medium text-white mb-4">Booking History</h4>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-gray-700">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Room
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Check-in
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Check-out
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Booked On
-                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Room</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Check-in</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Check-out</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Booked On</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
                     {selectedGuest.bookings.map((booking) => (
-                      <tr key={booking.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{booking.room_number}</div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{booking.check_in_date}</div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{booking.check_out_date}</div>
-                        </td>
+                      <tr key={booking.id} className="hover:bg-gray-700">
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">{booking.room_number}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">{booking.check_in_date}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">{booking.check_out_date}</td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(booking.status)}`}>
                             {booking.status}
                           </span>
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {new Date(booking.created_at).toLocaleDateString()}
-                          </div>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-green-400 font-medium">
+                          LKR {(booking.booking_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">
+                          {new Date(booking.created_at).toLocaleDateString()}
                         </td>
                       </tr>
                     ))}
@@ -8287,6 +8449,25 @@ const Navigation = () => {
                   </Link>
                 ))}
               </div>
+
+              {/* Expenses Section in Mobile */}
+              <div className="border-t border-gray-700 pt-2 mt-2">
+                <p className="px-3 py-1 text-xs text-gray-500 uppercase">Expenses</p>
+                {expenseItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`block px-3 py-2 rounded-md text-base font-medium ml-2 ${
+                      isActive(item.path)
+                        ? 'bg-blue-900 text-blue-300'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
               
               {navItems.slice(6).map((item) => (
                 <Link
@@ -8355,6 +8536,12 @@ const Restaurant = () => {
   const [paymentData, setPaymentData] = useState({
     payment_method: 'Cash',
     add_to_room_bill: false
+  });
+  const [menuItemDropdown, setMenuItemDropdown] = useState(null);
+  const [showEditItemModal, setShowEditItemModal] = useState(false);
+  const [editItemData, setEditItemData] = useState({
+    id: '', name: '', description: '', price: 0, category_id: '',
+    is_vegetarian: false, is_spicy: false, prep_time: 15
   });
 
   useEffect(() => {
@@ -8556,15 +8743,54 @@ const Restaurant = () => {
   };
 
   const handleDeleteMenuItem = async (itemId) => {
-    if (!window.confirm('Are you sure you want to delete this menu item?')) return;
-    
     try {
+      // Check if item can be deleted
+      const checkResp = await axios.get(`${API}/restaurant/menu-items/${itemId}/can-delete`);
+      if (!checkResp.data.can_delete) {
+        alert(checkResp.data.reason);
+        return;
+      }
+      if (!window.confirm('Are you sure you want to delete this menu item?')) return;
       await axios.delete(`${API}/restaurant/menu-items/${itemId}`);
       await fetchMenuItems();
       alert('Menu item deleted successfully!');
     } catch (error) {
       console.error('Error deleting menu item:', error);
-      alert('Error deleting menu item: ' + (error.response?.data?.detail || error.message));
+      alert(error.response?.data?.detail || error.message);
+    }
+  };
+
+  const openEditItemModal = (item) => {
+    setEditItemData({
+      id: item.id,
+      name: item.name,
+      description: item.description || '',
+      price: item.price,
+      category_id: item.category_id,
+      is_vegetarian: item.is_vegetarian || false,
+      is_spicy: item.is_spicy || false,
+      prep_time: item.prep_time || 15
+    });
+    setShowEditItemModal(true);
+    setMenuItemDropdown(null);
+  };
+
+  const handleUpdateMenuItem = async () => {
+    try {
+      await axios.put(`${API}/restaurant/menu-items/${editItemData.id}`, {
+        name: editItemData.name,
+        description: editItemData.description,
+        price: editItemData.price,
+        category_id: editItemData.category_id,
+        is_vegetarian: editItemData.is_vegetarian,
+        is_spicy: editItemData.is_spicy,
+        prep_time: editItemData.prep_time
+      });
+      setShowEditItemModal(false);
+      await fetchMenuItems();
+      alert('Menu item updated successfully!');
+    } catch (error) {
+      alert('Error updating: ' + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -8796,12 +9022,42 @@ const Restaurant = () => {
                               <span className="text-gray-400">{item.prep_time}min</span>
                             </div>
                             {(user?.role === 'Admin' || user?.role === 'Restaurant Manager') && (
-                              <button
-                                onClick={() => handleDeleteMenuItem(item.id)}
-                                className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                              >
-                                Delete
-                              </button>
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setMenuItemDropdown(menuItemDropdown === item.id ? null : item.id); }}
+                                  className="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-500 flex items-center"
+                                  data-testid={`menu-item-actions-${item.id}`}
+                                >
+                                  Actions
+                                  <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                                {menuItemDropdown === item.id && (
+                                  <div className="absolute right-0 mt-1 w-36 bg-gray-600 rounded-md shadow-lg z-20 border border-gray-500">
+                                    <button
+                                      onClick={() => openEditItemModal(item)}
+                                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-500 flex items-center"
+                                      data-testid={`edit-menu-item-${item.id}`}
+                                    >
+                                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                      Edit Item
+                                    </button>
+                                    <button
+                                      onClick={() => { handleDeleteMenuItem(item.id); setMenuItemDropdown(null); }}
+                                      className="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-gray-500 flex items-center"
+                                      data-testid={`delete-menu-item-${item.id}`}
+                                    >
+                                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      Delete Item
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -9651,6 +9907,95 @@ const Restaurant = () => {
                   ? 'Add to Room Bill' 
                   : 'Process Payment'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Menu Item Modal */}
+      {showEditItemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md" data-testid="edit-menu-item-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Edit Menu Item</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={editItemData.name}
+                  onChange={(e) => setEditItemData({...editItemData, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  data-testid="edit-item-name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={editItemData.description}
+                  onChange={(e) => setEditItemData({...editItemData, description: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Price (LKR) *</label>
+                  <input
+                    type="number"
+                    value={editItemData.price}
+                    onChange={(e) => setEditItemData({...editItemData, price: parseFloat(e.target.value) || 0})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                    data-testid="edit-item-price"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Prep Time (min)</label>
+                  <input
+                    type="number"
+                    value={editItemData.prep_time}
+                    onChange={(e) => setEditItemData({...editItemData, prep_time: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
+                <select
+                  value={editItemData.category_id}
+                  onChange={(e) => setEditItemData({...editItemData, category_id: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                  data-testid="edit-item-category"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex space-x-4">
+                <label className="flex items-center text-gray-300 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editItemData.is_vegetarian}
+                    onChange={(e) => setEditItemData({...editItemData, is_vegetarian: e.target.checked})}
+                    className="mr-2"
+                  />
+                  Vegetarian
+                </label>
+                <label className="flex items-center text-gray-300 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editItemData.is_spicy}
+                    onChange={(e) => setEditItemData({...editItemData, is_spicy: e.target.checked})}
+                    className="mr-2"
+                  />
+                  Spicy
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={() => setShowEditItemModal(false)} className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700">Cancel</button>
+              <button onClick={handleUpdateMenuItem} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" data-testid="save-edit-item-btn">Save Changes</button>
             </div>
           </div>
         </div>

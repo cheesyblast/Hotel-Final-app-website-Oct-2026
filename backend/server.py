@@ -134,6 +134,8 @@ class Booking(BaseModel):
     guest_phone: str = ""
     guest_id_passport: str = ""
     guest_country: str = ""
+    guest_id_proof: str = ""  # Base64 encoded PDF
+    guest_id_proof_filename: str = ""
     room_number: str
     check_in_date: date
     check_out_date: date
@@ -178,6 +180,8 @@ class BookingCreate(BaseModel):
     guest_phone: str = ""
     guest_id_passport: str = ""
     guest_country: str = ""
+    guest_id_proof: str = ""  # Base64 encoded PDF
+    guest_id_proof_filename: str = ""  # Original filename
     room_number: str
     check_in_date: date
     check_out_date: Optional[date] = None
@@ -257,6 +261,7 @@ class CheckinRequest(BaseModel):
     advance_amount: float = 0.0
     notes: str = ""
     payment_method: str = "Cash"
+    new_room_number: Optional[str] = None  # Optional room change during checkin
 
 class Expense(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -3127,8 +3132,9 @@ async def get_bookings(
     # Get total count for pagination
     total_count = await db.bookings.count_documents(query)
     
-    # Get bookings with pagination
-    bookings = await db.bookings.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    # Get bookings with pagination - exclude large proof field
+    proof_exclude = {"_id": 0, "guest_id_proof": 0}
+    bookings = await db.bookings.find(query, proof_exclude).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     
     # Convert datetime back to date for response
     for booking in bookings:
@@ -3222,7 +3228,7 @@ async def get_upcoming_bookings():
     Bookings remain 'Upcoming' until checked in or cancelled."""
     bookings = await db.bookings.find({
         "status": "Upcoming"
-    }).sort("check_in_date", 1).to_list(20)
+    }, {"_id": 0, "guest_id_proof": 0}).sort("check_in_date", 1).to_list(100)
     
     # Convert datetime back to date for response
     for booking in bookings:
@@ -4309,16 +4315,26 @@ async def checkin_customer(checkin: CheckinRequest):
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     
-    # Check if room is available or has a valid booking
-    room = await db.rooms.find_one({"room_number": booking["room_number"]})
+    # Determine the room to use (original or changed)
+    target_room_number = checkin.new_room_number if checkin.new_room_number else booking["room_number"]
+    
+    # Check if target room is available
+    room = await db.rooms.find_one({"room_number": target_room_number})
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     
     # Allow check-in if room is Available or if it has a booking (not currently occupied)
     if room["status"] == "Occupied":
-        # Check if the current guest is different (double booking scenario)
         if room.get("current_guest") and room.get("current_guest") != booking["guest_name"]:
             raise HTTPException(status_code=400, detail="Room is currently occupied by another guest")
+    
+    # If room changed, update the booking record
+    if checkin.new_room_number and checkin.new_room_number != booking["room_number"]:
+        await db.bookings.update_one(
+            {"id": checkin.booking_id},
+            {"$set": {"room_number": checkin.new_room_number}}
+        )
+        booking["room_number"] = checkin.new_room_number
     
     
     # Use the booking amount as room charges (actual amount customer agreed to pay)
@@ -4733,8 +4749,8 @@ async def initialize_sample_data():
 # Guest Management Routes
 @api_router.get("/guests")
 async def get_guests():
-    # Get all bookings to extract guest information
-    bookings = await db.bookings.find().to_list(1000)
+    # Get all bookings to extract guest information - exclude large proof field
+    bookings = await db.bookings.find({}, {"_id": 0, "guest_id_proof": 0}).to_list(1000)
     
     # Create a dictionary to store unique guests with their booking history
     guests_dict = {}
@@ -4809,10 +4825,28 @@ async def get_guests():
     
     return guests_list
 
-@api_router.get("/guests/{guest_email}")
-async def get_guest_details(guest_email: str):
-    # Get all bookings for this guest
-    bookings = await db.bookings.find({"guest_email": guest_email}).to_list(1000)
+@api_router.get("/guests/{guest_id:path}")
+async def get_guest_details(guest_id: str):
+    # Try to find by email first (if guest_id contains @)
+    if '@' in guest_id:
+        bookings = await db.bookings.find({"guest_email": guest_id}, {"_id": 0}).to_list(1000)
+    else:
+        # guest_id is a composite key: name_phone_bookingId
+        # Try to find the booking by the booking ID part
+        parts = guest_id.rsplit('_', 1)
+        if len(parts) == 2:
+            booking_id = parts[1]
+            first_booking = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+            if first_booking:
+                # Find all bookings by this guest (name + phone match)
+                bookings = await db.bookings.find({
+                    "guest_name": first_booking.get("guest_name"),
+                    "guest_phone": first_booking.get("guest_phone")
+                }, {"_id": 0}).to_list(1000)
+            else:
+                bookings = []
+        else:
+            bookings = []
     
     if not bookings:
         raise HTTPException(status_code=404, detail="Guest not found")
@@ -4824,11 +4858,32 @@ async def get_guest_details(guest_email: str):
         if isinstance(booking.get('check_out_date'), datetime):
             booking['check_out_date'] = booking['check_out_date'].date()
     
+    # Collect ID proof from any booking that has it
+    id_proof = ""
+    id_proof_filename = ""
+    for b in bookings:
+        if b.get('guest_id_proof'):
+            id_proof = b['guest_id_proof']
+            id_proof_filename = b.get('guest_id_proof_filename', 'document.pdf')
+            break
+    
     guest_info = {
         'name': bookings[0].get('guest_name'),
-        'email': guest_email,
-        'phone': bookings[0].get('guest_phone'),
-        'bookings': [Booking(**booking) for booking in bookings]
+        'email': bookings[0].get('guest_email', ''),
+        'phone': bookings[0].get('guest_phone', ''),
+        'country': bookings[0].get('guest_country', ''),
+        'id_passport': bookings[0].get('guest_id_passport', ''),
+        'id_proof': id_proof,
+        'id_proof_filename': id_proof_filename,
+        'bookings': [{
+            'id': b.get('id'),
+            'room_number': b.get('room_number'),
+            'check_in_date': b.get('check_in_date'),
+            'check_out_date': b.get('check_out_date'),
+            'status': b.get('status'),
+            'created_at': b.get('created_at'),
+            'booking_amount': b.get('booking_amount', 0)
+        } for b in bookings]
     }
     
     return guest_info
@@ -4928,6 +4983,126 @@ async def update_guest_details(
         "message": "Guest details updated successfully",
         "bookings_updated": booking_result.modified_count
     }
+
+# Guest ID Proof management
+class GuestProofUpload(BaseModel):
+    guest_id: str
+    id_proof: str  # Base64 encoded PDF
+    id_proof_filename: str
+
+@api_router.post("/guests/upload-proof")
+async def upload_guest_proof(
+    data: GuestProofUpload,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Upload or replace ID proof for a guest"""
+    guest_id = data.guest_id
+    
+    if '@' in guest_id:
+        query = {"guest_email": guest_id}
+    else:
+        parts = guest_id.rsplit('_', 1)
+        if len(parts) == 2:
+            booking_id = parts[1]
+            booking = await db.bookings.find_one({"id": booking_id})
+            if booking:
+                query = {"guest_name": booking.get('guest_name'), "guest_phone": booking.get('guest_phone', '')}
+            else:
+                raise HTTPException(status_code=404, detail="Guest not found")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid guest identifier")
+    
+    result = await db.bookings.update_many(
+        query,
+        {"$set": {"guest_id_proof": data.id_proof, "guest_id_proof_filename": data.id_proof_filename}}
+    )
+    
+    return {"message": "ID proof uploaded successfully", "bookings_updated": result.modified_count}
+
+@api_router.delete("/guests/delete-proof/{guest_id:path}")
+async def delete_guest_proof(
+    guest_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Delete ID proof for a guest"""
+    if '@' in guest_id:
+        query = {"guest_email": guest_id}
+    else:
+        parts = guest_id.rsplit('_', 1)
+        if len(parts) == 2:
+            booking_id = parts[1]
+            booking = await db.bookings.find_one({"id": booking_id})
+            if booking:
+                query = {"guest_name": booking.get('guest_name'), "guest_phone": booking.get('guest_phone', '')}
+            else:
+                raise HTTPException(status_code=404, detail="Guest not found")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid guest identifier")
+    
+    result = await db.bookings.update_many(
+        query,
+        {"$set": {"guest_id_proof": "", "guest_id_proof_filename": ""}}
+    )
+    
+    return {"message": "ID proof deleted successfully", "bookings_updated": result.modified_count}
+
+# Menu item edit and delete-check endpoints
+class MenuItemUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category_id: Optional[str] = None
+    is_vegetarian: Optional[bool] = None
+    is_spicy: Optional[bool] = None
+    prep_time: Optional[int] = None
+
+@api_router.put("/restaurant/menu-items/{item_id}")
+async def update_menu_item(
+    item_id: str,
+    item_update: MenuItemUpdate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update a menu item and sync changes to linked stock items"""
+    existing = await db.menu_items.find_one({"id": item_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+    
+    update_fields = {k: v for k, v in item_update.dict().items() if v is not None}
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    await db.menu_items.update_one({"id": item_id}, {"$set": update_fields})
+    
+    # Sync name and category to linked stock item if exists
+    if existing.get('stock_item_id') and (item_update.name or item_update.category_id):
+        stock_update = {}
+        if item_update.name:
+            stock_update['item_name'] = item_update.name
+        if item_update.category_id:
+            # Get category name
+            cat = await db.menu_categories.find_one({"id": item_update.category_id})
+            if cat:
+                stock_update['category'] = cat['name']
+        if stock_update:
+            await db.stock_items.update_one(
+                {"id": existing['stock_item_id']},
+                {"$set": stock_update}
+            )
+    
+    updated = await db.menu_items.find_one({"id": item_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/restaurant/menu-items/{item_id}/can-delete")
+async def check_menu_item_deletable(item_id: str):
+    """Check if a menu item can be deleted (not used in any orders)"""
+    # Check if item exists in any order
+    orders = await db.restaurant_orders.find(
+        {"items.menu_item_id": item_id}
+    ).to_list(1)
+    
+    if orders:
+        return {"can_delete": False, "reason": "This item has been used in existing orders and cannot be deleted."}
+    return {"can_delete": True, "reason": ""}
 
 # Reports and Analytics Routes
 @api_router.get("/reports/daily")
@@ -5780,49 +5955,28 @@ async def create_menu_item(
     
     return new_item
 
-@api_router.put("/restaurant/menu-items/{item_id}")
-async def update_menu_item(
-    item_id: str,
-    item: MenuItemCreate,
-    current_user: UserResponse = Depends(get_current_user)
-):
-    """Update a menu item"""
-    if current_user.role not in ["Admin", "Restaurant Manager"]:
-        raise HTTPException(status_code=403, detail="Access denied.")
-    
-    result = await db.menu_items.update_one(
-        {"id": item_id},
-        {"$set": item.dict()}
-    )
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Menu item not found")
-    
-    return {"message": "Menu item updated successfully"}
+# NOTE: The update_menu_item endpoint has been moved above (around line 5059) 
+# with enhanced stock sync feature. This duplicate was removed to prevent conflicts.
 
 @api_router.delete("/restaurant/menu-items/{item_id}")
 async def delete_menu_item(
     item_id: str,
     current_user: UserResponse = Depends(get_current_user)
 ):
-    """Delete a menu item"""
+    """Delete a menu item - blocked if used in any orders"""
     if current_user.role not in ["Admin", "Restaurant Manager"]:
         raise HTTPException(status_code=403, detail="Access denied.")
     
-    # Check if item is in active orders
-    active_orders = await db.restaurant_orders.find({
-        "payment_status": "Pending",
+    # Check if item is in ANY orders (not just active ones)
+    any_orders = await db.restaurant_orders.find({
         "items.menu_item_id": item_id
     }).to_list(1)
-    if active_orders:
-        raise HTTPException(status_code=400, detail="Cannot delete item that is in active orders")
+    if any_orders:
+        raise HTTPException(status_code=400, detail="This item has been used in existing orders and cannot be deleted.")
     
-    result = await db.menu_items.update_one(
-        {"id": item_id},
-        {"$set": {"is_available": False}}
-    )
+    result = await db.menu_items.delete_one({"id": item_id})
     
-    if result.modified_count == 0:
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Menu item not found")
     
     return {"message": "Menu item deleted successfully"}
