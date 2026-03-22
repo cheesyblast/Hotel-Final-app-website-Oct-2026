@@ -5573,6 +5573,7 @@ const Reports = () => {
 
 // Expenses Component
 const Expenses = () => {
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [incomes, setIncomes] = useState([]);
   const [dailySales, setDailySales] = useState([]);
