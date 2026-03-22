@@ -141,6 +141,8 @@ class Booking(BaseModel):
     check_out_date: date
     stay_type: str = "Night Stay"  # "Night Stay" or "Short Time"
     booking_amount: float = 0.0  # Custom amount entered by user
+    advance_amount: float = 0.0  # Advance payment at booking time
+    advance_payment_method: str = "Cash"
     commission_amount: float = 0.0  # Commission payable to booking channel
     booking_channel_id: str = ""  # ID of the booking channel
     booking_channel_name: str = "Direct"  # Name of the booking channel for display
@@ -153,6 +155,7 @@ class BookingChannel(BaseModel):
     channel_name: str  # e.g., "Booking.com", "Expedia", "Direct", "Agoda"
     channel_type: str = "OTA"  # OTA (Online Travel Agency), Direct, Corporate, Walk-in
     commission_rate: float = 0.0  # Percentage commission (e.g., 15.5 for 15.5%)
+    auto_rate: bool = True  # Auto-calculate commission from percentage
     contact_email: str = ""
     contact_phone: str = ""
     is_active: bool = True
@@ -163,6 +166,7 @@ class BookingChannelCreate(BaseModel):
     channel_name: str
     channel_type: str = "OTA"
     commission_rate: float = 0.0
+    auto_rate: bool = True
     contact_email: str = ""
     contact_phone: str = ""
 
@@ -170,6 +174,7 @@ class BookingChannelUpdate(BaseModel):
     channel_name: Optional[str] = None
     channel_type: Optional[str] = None
     commission_rate: Optional[float] = None
+    auto_rate: Optional[bool] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
     is_active: Optional[bool] = None
@@ -187,6 +192,8 @@ class BookingCreate(BaseModel):
     check_out_date: Optional[date] = None
     stay_type: str = "Night Stay"
     booking_amount: float = 0.0
+    advance_amount: float = 0.0  # Advance payment at booking time
+    advance_payment_method: str = "Cash"
     commission_amount: float = 0.0  # Commission payable to booking channel
     booking_channel_id: str = ""  # ID of the booking channel
     booking_channel_name: str = "Direct"  # Name of the booking channel for display
@@ -3296,6 +3303,28 @@ async def create_booking(booking: BookingCreate, current_user: UserResponse = De
     
     await db.bookings.insert_one(booking_storage)
     
+    # Record advance payment to Room Bookings Income if present
+    if booking.advance_amount > 0:
+        advance_sale = DailySale(
+            date=datetime.combine(datetime.now().date(), datetime.min.time()),
+            customer_name=booking.guest_name,
+            room_number=booking.room_number,
+            room_charges=0.0,  # No room charges yet - this is just advance
+            additional_charges=0.0,
+            discount_amount=0.0,
+            advance_amount=booking.advance_amount,
+            total_amount=booking.advance_amount,
+            payment_method=booking.advance_payment_method
+        )
+        advance_storage = advance_sale.dict()
+        advance_storage.pop("_id", None)
+        # Add extra fields for tracking
+        advance_storage["booking_id"] = booking_obj.id
+        advance_storage["sale_type"] = "room_booking_advance"
+        if isinstance(advance_storage.get("date"), date) and not isinstance(advance_storage.get("date"), datetime):
+            advance_storage["date"] = datetime.combine(advance_storage["date"], datetime.min.time())
+        await db.daily_sales.insert_one(advance_storage)
+    
     # If booking status is "Checked In", also create a customer record
     if final_status == "Checked In":
         customer_data = {
@@ -4366,26 +4395,24 @@ async def checkin_customer(checkin: CheckinRequest):
     # actual_checkout_date is None, so no conversion needed
     await db.customers.insert_one(customer_dict)
     
-    # Record advance amount as income if amount > 0
-    # NOTE: We only create an Income record (not DailySale) to avoid double-counting
-    # in financial summaries. The Income record is the single source of truth for advance payments.
+    # Record advance amount as Room Booking Income if amount > 0
     if advance_amount > 0:
-        # Record as income (single source of truth for advance payments)
-        income_id = str(uuid.uuid4())
-        await db.incomes.insert_one({
-            "id": income_id,
-            "income_date": datetime.combine(datetime.now().date(), datetime.min.time()),
-            "category": "Advance Payment",
-            "description": f"Advance payment from {booking['guest_name']} - Room {booking['room_number']}",
-            "amount": advance_amount,
+        advance_sale = {
+            "id": str(uuid.uuid4()),
+            "date": datetime.combine(datetime.now().date(), datetime.min.time()),
+            "customer_name": booking['guest_name'],
+            "room_number": booking['room_number'],
+            "total_amount": advance_amount,
             "payment_method": checkin.payment_method,
-            "created_by": "system",
+            "booking_id": checkin.booking_id,
+            "sale_type": "room_booking_advance",
             "created_at": datetime.now()
-        })
+        }
+        await db.daily_sales.insert_one(advance_sale)
     
     # Update room status to occupied
     await db.rooms.update_one(
-        {"room_number": booking["room_number"]},
+        {"room_number": target_room_number},
         {"$set": {
             "status": "Occupied",
             "current_guest": booking["guest_name"],
@@ -5395,6 +5422,56 @@ async def delete_income(income_id: str):
         raise HTTPException(status_code=404, detail="Income not found")
     return {"message": "Income deleted successfully"}
 
+# Dynamic Categories Management
+@api_router.get("/categories/{category_type}")
+async def get_categories(category_type: str):
+    """Get categories for expense or income"""
+    cats = await db.dynamic_categories.find(
+        {"type": category_type}, {"_id": 0}
+    ).sort("name", 1).to_list(100)
+    return [c["name"] for c in cats]
+
+@api_router.post("/categories/{category_type}")
+async def add_category(
+    category_type: str,
+    data: dict,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Add a new category (admin only)"""
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only admins can add categories")
+    
+    name = data.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Category name is required")
+    
+    existing = await db.dynamic_categories.find_one({"type": category_type, "name": name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Category already exists")
+    
+    await db.dynamic_categories.insert_one({
+        "id": str(uuid.uuid4()),
+        "type": category_type,
+        "name": name,
+        "created_at": datetime.utcnow()
+    })
+    return {"message": f"Category '{name}' added", "name": name}
+
+@api_router.delete("/categories/{category_type}/{name}")
+async def delete_category(
+    category_type: str,
+    name: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Delete a category (admin only)"""
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only admins can delete categories")
+    
+    result = await db.dynamic_categories.delete_one({"type": category_type, "name": name})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"message": f"Category '{name}' deleted"}
+
 @api_router.get("/daily-sales")
 async def get_daily_sales(start_date: Optional[str] = None, end_date: Optional[str] = None):
     # Default to current month if no dates provided
@@ -6260,6 +6337,12 @@ async def pay_restaurant_order(
     
     # Handle room service billing - only add to room bill if explicitly requested
     if order["order_type"] == "room_service" and add_to_room_bill:
+        # Update status to Room Bill
+        await db.restaurant_orders.update_one(
+            {"id": order_id},
+            {"$set": {"payment_status": "Room Bill", "order_status": "Completed"}}
+        )
+        
         # Add to customer's room charges - will be collected at checkout
         customer = await db.customers.find_one({
             "current_room": order["room_number"],
@@ -6334,6 +6417,71 @@ async def pay_restaurant_order(
         )
     
     return {"message": "Payment processed successfully", "payment_method": payment_method, "added_to_room_bill": add_to_room_bill}
+
+@api_router.put("/restaurant/orders/{order_id}/items")
+async def update_order_items(
+    order_id: str,
+    data: dict,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update items in an existing order (only if not Room Bill)"""
+    order = await db.restaurant_orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("payment_status") == "Room Bill":
+        raise HTTPException(status_code=400, detail="Cannot edit orders already sent to Room Bill")
+    if order.get("payment_status") == "Paid":
+        raise HTTPException(status_code=400, detail="Cannot edit paid orders")
+    
+    items = data.get("items", [])
+    subtotal = sum(item.get("total_price", 0) for item in items)
+    service_charge_rate = order.get("service_charge_rate", 10)
+    service_charge = subtotal * (service_charge_rate / 100)
+    tax_amount = subtotal * 0.1  # 10% tax
+    total_amount = subtotal + service_charge + tax_amount
+    
+    await db.restaurant_orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "items": items,
+            "subtotal": subtotal,
+            "service_charge": service_charge,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount
+        }}
+    )
+    
+    updated = await db.restaurant_orders.find_one({"id": order_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/restaurant/orders/{order_id}/cancel")
+async def cancel_restaurant_order(
+    order_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Cancel a restaurant order"""
+    order = await db.restaurant_orders.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("payment_status") == "Paid":
+        raise HTTPException(status_code=400, detail="Cannot cancel a paid order")
+    if order.get("payment_status") == "Room Bill":
+        raise HTTPException(status_code=400, detail="Cannot cancel orders sent to Room Bill")
+    
+    await db.restaurant_orders.update_one(
+        {"id": order_id},
+        {"$set": {"order_status": "Cancelled", "payment_status": "Cancelled"}}
+    )
+    return {"message": "Order cancelled successfully"}
+
+@api_router.get("/restaurant/orders/room/{room_number}")
+async def get_room_orders(room_number: str):
+    """Get all restaurant orders for a specific room (for checkout bill)"""
+    orders = await db.restaurant_orders.find({
+        "room_number": room_number,
+        "payment_status": "Room Bill"
+    }, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return orders
 
 # ==================== RESTAURANT EXPENSES ====================
 
@@ -7169,9 +7317,16 @@ async def create_employee(employee: EmployeeCreate):
             emp_dict[field] = datetime.combine(emp_dict[field], datetime.min.time())
     
     emp_obj = Employee(**emp_dict)
-    await db.employees.insert_one(emp_obj.dict())
+    storage = emp_obj.dict()
+    # Ensure all date fields are datetime for MongoDB
+    for field in ["date_of_birth", "hire_date"]:
+        if isinstance(storage.get(field), date) and not isinstance(storage.get(field), datetime):
+            storage[field] = datetime.combine(storage[field], datetime.min.time())
     
-    return {"message": "Employee created", "employee": emp_obj.dict()}
+    await db.employees.insert_one(storage)
+    storage.pop("_id", None)
+    
+    return {"message": "Employee created", "employee": storage}
 
 @api_router.put("/payroll/employees/{employee_id}")
 async def update_employee(employee_id: str, updates: dict):

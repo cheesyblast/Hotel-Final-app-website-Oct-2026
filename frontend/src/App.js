@@ -1067,6 +1067,8 @@ const Dashboard = () => {
     stay_type: 'Night Stay',
     rate_per_night: '',
     booking_amount: 0,
+    advance_amount: 0,
+    advance_payment_method: 'Cash',
     commission_amount: 0,
     booking_channel_id: '',
     booking_channel_name: 'Direct',
@@ -1311,6 +1313,14 @@ const Dashboard = () => {
         console.error('Error updating available rooms:', error);
         // Fallback to all non-occupied rooms
         setAvailableRoomsForBooking(getAvailableRooms());
+      }
+    }
+    
+    // Auto-calculate commission if channel has auto_rate
+    if (['rate_per_night', 'check_in_date', 'check_out_date', 'stay_type', 'booking_channel_id'].includes(field)) {
+      const selectedChannel = availableChannels.find(ch => ch.id === updatedData.booking_channel_id);
+      if (selectedChannel && selectedChannel.auto_rate !== false && selectedChannel.commission_rate > 0 && updatedData.booking_amount > 0) {
+        updatedData.commission_amount = parseFloat((updatedData.booking_amount * selectedChannel.commission_rate / 100).toFixed(2));
       }
     }
     
@@ -1761,6 +1771,8 @@ const Dashboard = () => {
         ...newBookingData,
         booking_amount: newBookingData.booking_amount, // This is the calculated total
         commission_amount: parseFloat(newBookingData.commission_amount) || 0,
+        advance_amount: parseFloat(newBookingData.advance_amount) || 0,
+        advance_payment_method: newBookingData.advance_payment_method || 'Cash',
         booking_status: status
       };
 
@@ -1792,6 +1804,8 @@ const Dashboard = () => {
         stay_type: 'Night Stay',
         rate_per_night: '',
         booking_amount: 0,
+        advance_amount: 0,
+        advance_payment_method: 'Cash',
         commission_amount: 0,
         booking_channel_id: '',
         booking_channel_name: 'Direct',
@@ -3311,118 +3325,100 @@ const Dashboard = () => {
       {/* New Booking Modal */}
       {showNewBookingModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Create New Booking</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="new-booking-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Create New Booking</h3>
             
             <div className="grid grid-cols-2 gap-6">
               {/* Left Column - Guest Information */}
               <div className="space-y-4">
-                <h4 className="text-md font-medium text-gray-800 border-b pb-2">Guest Information</h4>
+                <h4 className="text-md font-medium text-gray-300 border-b border-gray-600 pb-2">Guest Information</h4>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Guest Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Guest Name *</label>
                   <input
                     type="text"
                     value={newBookingData.guest_name}
                     onChange={(e) => setNewBookingData({...newBookingData, guest_name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter guest name"
                     required
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={newBookingData.guest_email}
-                    onChange={(e) => setNewBookingData({...newBookingData, guest_email: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter email address (optional)"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={newBookingData.guest_email}
+                      onChange={(e) => setNewBookingData({...newBookingData, guest_email: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      placeholder="Email (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={newBookingData.guest_phone}
+                      onChange={(e) => setNewBookingData({...newBookingData, guest_phone: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      placeholder="Phone (optional)"
+                    />
+                  </div>
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={newBookingData.guest_phone}
-                    onChange={(e) => setNewBookingData({...newBookingData, guest_phone: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter phone number (optional)"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ID/Passport Number
-                  </label>
-                  <input
-                    type="text"
-                    value={newBookingData.guest_id_passport}
-                    onChange={(e) => setNewBookingData({...newBookingData, guest_id_passport: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter ID or passport number"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Country
-                  </label>
-                  <div className="relative">
+                {/* ID/Passport and Country in same row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">ID/Passport Number</label>
                     <input
                       type="text"
-                      value={newBookingData.guest_country}
-                      onChange={(e) => setNewBookingData({...newBookingData, guest_country: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Type to search country..."
-                      list="country-list"
+                      value={newBookingData.guest_id_passport}
+                      onChange={(e) => setNewBookingData({...newBookingData, guest_id_passport: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      placeholder="ID/Passport number"
                     />
-                    <datalist id="country-list">
-                      {COUNTRIES.filter(country => 
-                        country.toLowerCase().includes((newBookingData.guest_country || '').toLowerCase())
-                      ).map(country => (
-                        <option key={country} value={country} />
-                      ))}
-                    </datalist>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Start typing to search countries</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Country</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={newBookingData.guest_country}
+                        onChange={(e) => setNewBookingData({...newBookingData, guest_country: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                        placeholder="Type country..."
+                        list="country-list"
+                      />
+                      <datalist id="country-list">
+                        {COUNTRIES.filter(country => 
+                          country.toLowerCase().includes((newBookingData.guest_country || '').toLowerCase())
+                        ).map(country => (
+                          <option key={country} value={country} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
                 </div>
 
                 {/* ID Proof Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Upload ID / Passport (PDF)
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={handlePdfUpload}
-                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      data-testid="booking-pdf-upload"
-                    />
-                  </div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Upload ID / Passport (PDF)</label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handlePdfUpload}
+                    className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                    data-testid="booking-pdf-upload"
+                  />
                   {newBookingData.guest_id_proof_filename && (
-                    <div className="mt-1 flex items-center text-xs text-green-600">
+                    <div className="mt-1 flex items-center text-xs text-green-400">
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                       </svg>
                       {newBookingData.guest_id_proof_filename}
-                      <button
-                        type="button"
-                        onClick={() => setNewBookingData(prev => ({...prev, guest_id_proof: '', guest_id_proof_filename: ''}))}
-                        className="ml-2 text-red-500 hover:text-red-700"
-                      >
-                        Remove
-                      </button>
+                      <button type="button" onClick={() => setNewBookingData(prev => ({...prev, guest_id_proof: '', guest_id_proof_filename: ''}))} className="ml-2 text-red-400 hover:text-red-300">Remove</button>
                     </div>
                   )}
                   <p className="text-xs text-gray-500 mt-1">Max 5MB PDF file</p>
@@ -3431,196 +3427,230 @@ const Dashboard = () => {
               
               {/* Right Column - Booking Details */}
               <div className="space-y-4">
-                <h4 className="text-md font-medium text-gray-800 border-b pb-2">Booking Details</h4>
+                <h4 className="text-md font-medium text-gray-300 border-b border-gray-600 pb-2">Booking Details</h4>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stay Type *
-                  </label>
-                  <select
-                    value={newBookingData.stay_type}
-                    onChange={(e) => handleBookingFieldChange('stay_type', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="Night Stay">Night Stay</option>
-                    <option value="Short Time">Short Time</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {newBookingData.stay_type === 'Short Time' 
-                      ? 'Customer will checkout on the same day' 
-                      : 'Customer will stay overnight'}
-                  </p>
-                </div>
-                
-                {/* Booking Channel Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Booking Channel *
-                  </label>
-                  <select
-                    value={newBookingData.booking_channel_id}
-                    onChange={(e) => {
-                      const selectedChannel = availableChannels.find(ch => ch.id === e.target.value);
-                      setNewBookingData({
-                        ...newBookingData, 
-                        booking_channel_id: e.target.value,
-                        booking_channel_name: selectedChannel ? selectedChannel.channel_name : 'Direct'
-                      });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Direct</option>
-                    {availableChannels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        {channel.channel_name} {channel.commission_rate > 0 && `(${channel.commission_rate}% commission)`}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Select the booking source (Direct, OTA, Corporate, etc.)
-                  </p>
+                {/* Stay Type and Booking Channel in same row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Stay Type *</label>
+                    <select
+                      value={newBookingData.stay_type}
+                      onChange={(e) => handleBookingFieldChange('stay_type', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="Night Stay">Night Stay</option>
+                      <option value="Short Time">Short Time</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Booking Channel *</label>
+                    <select
+                      value={newBookingData.booking_channel_id}
+                      onChange={(e) => {
+                        const selectedChannel = availableChannels.find(ch => ch.id === e.target.value);
+                        const updatedData = {
+                          ...newBookingData, 
+                          booking_channel_id: e.target.value,
+                          booking_channel_name: selectedChannel ? selectedChannel.channel_name : 'Direct'
+                        };
+                        // Auto-calculate commission if channel has auto_rate
+                        if (selectedChannel && selectedChannel.auto_rate !== false && selectedChannel.commission_rate > 0 && updatedData.booking_amount > 0) {
+                          updatedData.commission_amount = parseFloat((updatedData.booking_amount * selectedChannel.commission_rate / 100).toFixed(2));
+                        } else if (!selectedChannel) {
+                          updatedData.commission_amount = 0;
+                        }
+                        setNewBookingData(updatedData);
+                      }}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="">Direct</option>
+                      {availableChannels.map((channel) => (
+                        <option key={channel.id} value={channel.id}>
+                          {channel.channel_name} ({channel.commission_rate}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Check-in Date *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Check-in Date *</label>
                     <input
                       type="date"
                       value={newBookingData.check_in_date}
-                      onChange={(e) => handleBookingFieldChange('check_in_date', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        handleBookingFieldChange('check_in_date', e.target.value);
+                        // Auto-set checkout to next day
+                        if (e.target.value && newBookingData.stay_type === 'Night Stay') {
+                          const nextDay = new Date(e.target.value);
+                          nextDay.setDate(nextDay.getDate() + 1);
+                          const nextDayStr = nextDay.toISOString().split('T')[0];
+                          setTimeout(() => handleBookingFieldChange('check_out_date', nextDayStr), 50);
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
                   
-                  {newBookingData.stay_type === 'Night Stay' && (
+                  {newBookingData.stay_type === 'Night Stay' ? (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Check-out Date *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Check-out Date *</label>
                       <input
                         type="date"
                         value={newBookingData.check_out_date}
                         onChange={(e) => handleBookingFieldChange('check_out_date', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required={newBookingData.stay_type === 'Night Stay'}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                        required
+                        min={newBookingData.check_in_date}
                       />
                     </div>
-                  )}
-                  
-                  {newBookingData.stay_type === 'Short Time' && (
+                  ) : (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Check-out Date
-                      </label>
-                      <input
-                        type="text"
-                        value="Same day checkout"
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-500"
-                      />
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Check-out Date</label>
+                      <input type="text" value="Same day checkout" disabled className="w-full px-3 py-2 bg-gray-600 border border-gray-600 rounded-md text-gray-400" />
                     </div>
                   )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Room *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Room *</label>
                     <select
                       value={newBookingData.room_number}
                       onChange={(e) => handleBookingFieldChange('room_number', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
                       required
                     >
                       <option value="">Select a room</option>
                       {(availableRoomsForBooking.length > 0 ? availableRoomsForBooking : getAvailableRooms()).map((room) => (
-                        <option key={room.id} value={room.room_number}>
-                          {room.room_number}
-                        </option>
+                        <option key={room.id} value={room.room_number}>{room.room_number}</option>
                       ))}
                     </select>
-                    {newBookingData.check_in_date && availableRoomsForBooking.length === 0 && (
-                      <p className="text-xs text-orange-600 mt-1">
-                        Select dates first to see available rooms for those dates
-                      </p>
-                    )}
                   </div>
-                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Rate per Night (LKR) *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Rate per Night (LKR) *</label>
                     <input
                       type="number"
                       step="0.01"
                       value={newBookingData.rate_per_night}
                       onChange={(e) => handleBookingFieldChange('rate_per_night', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter rate per night"
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      placeholder="Rate per night"
                       required
                     />
                   </div>
-                  
+                </div>
+
+                {/* Commission field - auto or manual based on channel */}
+                {(() => {
+                  const selectedChannel = availableChannels.find(ch => ch.id === newBookingData.booking_channel_id);
+                  const isAutoRate = selectedChannel && selectedChannel.auto_rate !== false;
+                  return selectedChannel ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Commission (LKR) {isAutoRate ? '- Auto' : '- Manual'}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={newBookingData.commission_amount}
+                        onChange={(e) => setNewBookingData({...newBookingData, commission_amount: parseFloat(e.target.value) || 0})}
+                        readOnly={isAutoRate}
+                        className={`w-full px-3 py-2 border rounded-md text-white focus:ring-2 focus:ring-blue-500 ${
+                          isAutoRate ? 'bg-gray-600 border-gray-500 cursor-not-allowed' : 'bg-gray-700 border-gray-600'
+                        }`}
+                        placeholder="Commission payable"
+                      />
+                      {isAutoRate && (
+                        <p className="text-xs text-green-400 mt-1">Auto-calculated: {selectedChannel.commission_rate}% of booking amount</p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Advance Payment - Amount and Method in same row */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Commission (LKR)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Advance Amount (LKR)</label>
                     <input
                       type="number"
                       step="0.01"
-                      value={newBookingData.commission_amount}
-                      onChange={(e) => setNewBookingData({...newBookingData, commission_amount: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Commission payable to channel"
+                      value={newBookingData.advance_amount}
+                      onChange={(e) => setNewBookingData({...newBookingData, advance_amount: parseFloat(e.target.value) || 0})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                      data-testid="booking-advance-amount"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Commission payable to booking channel</p>
                   </div>
-                  
-                  {/* Show calculated total */}
-                  {newBookingData.booking_amount > 0 && (
-                    <div className="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="text-sm font-medium text-blue-800">
-                        Total Booking Amount: LKR {newBookingData.booking_amount.toFixed(2)}
-                      </div>
-                      {newBookingData.stay_type === 'Night Stay' && newBookingData.check_in_date && newBookingData.check_out_date && (
-                        <div className="text-xs text-blue-600 mt-1">
-                          {Math.max(1, Math.ceil((new Date(newBookingData.check_out_date) - new Date(newBookingData.check_in_date)) / (1000 * 60 * 60 * 24)))} night(s) × LKR {parseFloat(newBookingData.rate_per_night || 0).toFixed(2)}
-                        </div>
-                      )}
-                      {newBookingData.stay_type === 'Short Time' && (
-                        <div className="text-xs text-blue-600 mt-1">
-                          Short time rate
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Payment Type</label>
+                    <select
+                      value={newBookingData.advance_payment_method}
+                      onChange={(e) => setNewBookingData({...newBookingData, advance_payment_method: e.target.value})}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                      data-testid="booking-advance-method"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Card">Card</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                    </select>
+                  </div>
                 </div>
                 
+                {/* Booking Summary */}
+                {newBookingData.booking_amount > 0 && (
+                  <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3" data-testid="booking-summary">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-blue-300">Total Booking Amount:</span>
+                        <span className="text-white font-bold">LKR {newBookingData.booking_amount.toLocaleString()}</span>
+                      </div>
+                      {newBookingData.stay_type === 'Night Stay' && newBookingData.check_in_date && newBookingData.check_out_date && (
+                        <div className="text-xs text-blue-400">
+                          {Math.max(1, Math.ceil((new Date(newBookingData.check_out_date) - new Date(newBookingData.check_in_date)) / (1000 * 60 * 60 * 24)))} night(s) x LKR {parseFloat(newBookingData.rate_per_night || 0).toLocaleString()}
+                        </div>
+                      )}
+                      {newBookingData.commission_amount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-orange-300">Commission ({newBookingData.booking_channel_name}):</span>
+                          <span className="text-orange-400">LKR {newBookingData.commission_amount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {newBookingData.advance_amount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-green-300">Advance Received ({newBookingData.advance_payment_method}):</span>
+                          <span className="text-green-400">LKR {newBookingData.advance_amount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm border-t border-blue-700 pt-1 mt-1">
+                        <span className="text-gray-300">Balance Due:</span>
+                        <span className="text-yellow-300 font-bold">LKR {Math.max(0, newBookingData.booking_amount - newBookingData.advance_amount).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Additional Notes
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Additional Notes</label>
                   <textarea
                     value={newBookingData.additional_notes}
                     onChange={(e) => setNewBookingData({...newBookingData, additional_notes: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows="4"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
+                    rows="3"
                     placeholder="Any special requests or notes..."
                   />
                 </div>
               </div>
             </div>
             
-            <div className="flex justify-end space-x-3 mt-8">
+            <div className="flex justify-end space-x-3 mt-6">
               <button
                 onClick={() => setShowNewBookingModal(false)}
-                className="px-6 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-6 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
               >
                 Cancel
               </button>
@@ -3634,7 +3664,8 @@ const Dashboard = () => {
                   parseFloat(newBookingData.booking_amount) <= 0 ||
                   (newBookingData.stay_type === 'Night Stay' && !newBookingData.check_out_date)
                 }
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                data-testid="create-booking-btn"
               >
                 Create Booking
               </button>
@@ -5566,41 +5597,62 @@ const Expenses = () => {
     amount: 0,
     category: '',
     payment_method: 'Cash',
-    expense_date: ''
+    expense_date: new Date().toISOString().split('T')[0]
   });
   const [incomeData, setIncomeData] = useState({
     description: '',
     amount: 0,
     category: '',
     payment_method: 'Cash',
-    income_date: ''
+    income_date: new Date().toISOString().split('T')[0]
   });
 
-  const expenseCategories = [
-    'Utilities',
-    'Maintenance', 
-    'Staff',
-    'Food',
-    'Marketing',
-    'Other'
-  ];
+  const [expenseCategories, setExpenseCategories] = useState([]);
+  const [incomeCategories, setIncomeCategories] = useState([]);
+  const [newExpenseCategory, setNewExpenseCategory] = useState('');
+  const [newIncomeCategory, setNewIncomeCategory] = useState('');
 
-  const incomeCategories = [
-    'Restaurant',
-    'Laundry',
-    'Spa Services',
-    'Events',
-    'Conference Room',
-    'Parking',
-    'Internet Services',
-    'Other Services'
-  ];
+  const fetchCategories = async () => {
+    try {
+      const [expRes, incRes] = await Promise.all([
+        axios.get(`${API}/categories/expense`),
+        axios.get(`${API}/categories/income`)
+      ]);
+      setExpenseCategories(expRes.data);
+      setIncomeCategories(incRes.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const handleAddExpenseCategory = async () => {
+    if (!newExpenseCategory.trim()) return;
+    try {
+      await axios.post(`${API}/categories/expense`, { name: newExpenseCategory.trim() });
+      setNewExpenseCategory('');
+      fetchCategories();
+    } catch (error) {
+      alert(error.response?.data?.detail || 'Error adding category');
+    }
+  };
+
+  const handleAddIncomeCategory = async () => {
+    if (!newIncomeCategory.trim()) return;
+    try {
+      await axios.post(`${API}/categories/income`, { name: newIncomeCategory.trim() });
+      setNewIncomeCategory('');
+      fetchCategories();
+    } catch (error) {
+      alert(error.response?.data?.detail || 'Error adding category');
+    }
+  };
 
   const paymentMethods = ['Cash', 'Card', 'Bank Transfer'];
 
   useEffect(() => {
     fetchExpenses();
     fetchIncomes();
+    fetchCategories();
     fetchDailySales();
     fetchFinancialSummary();
     fetchDailyFinancialSummary();
@@ -6128,6 +6180,25 @@ const Expenses = () => {
                     </option>
                   ))}
                 </select>
+                {user?.role === 'Admin' && (
+                  <div className="flex mt-2 space-x-2">
+                    <input
+                      type="text"
+                      value={newExpenseCategory}
+                      onChange={(e) => setNewExpenseCategory(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      placeholder="New category name"
+                    />
+                    <button
+                      onClick={handleAddExpenseCategory}
+                      disabled={!newExpenseCategory.trim()}
+                      className="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 disabled:opacity-50"
+                      data-testid="add-expense-category-btn"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                )}
               </div>
               
               <div>
@@ -6231,6 +6302,25 @@ const Expenses = () => {
                     </option>
                   ))}
                 </select>
+                {user?.role === 'Admin' && (
+                  <div className="flex mt-2 space-x-2">
+                    <input
+                      type="text"
+                      value={newIncomeCategory}
+                      onChange={(e) => setNewIncomeCategory(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      placeholder="New category name"
+                    />
+                    <button
+                      onClick={handleAddIncomeCategory}
+                      disabled={!newIncomeCategory.trim()}
+                      className="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 disabled:opacity-50"
+                      data-testid="add-income-category-btn"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                )}
               </div>
               
               <div>
@@ -9152,20 +9242,50 @@ const Restaurant = () => {
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-green-400">LKR {order.total_amount}</td>
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs rounded ${
-                            order.payment_status === 'Paid' ? 'bg-green-600' : 'bg-yellow-600'
+                            order.payment_status === 'Paid' ? 'bg-green-600' :
+                            order.payment_status === 'Room Bill' ? 'bg-purple-600' :
+                            order.payment_status === 'Cancelled' ? 'bg-red-600' :
+                            'bg-yellow-600'
                           }`}>
                             {order.payment_status}
                           </span>
                         </td>
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                          {order.payment_status === 'Pending' && (
+                          <div className="flex space-x-1">
                             <button
-                              onClick={() => handlePayOrder(order.id)}
-                              className="bg-green-600 text-white px-2 py-1 sm:px-3 sm:py-1 rounded text-xs sm:text-sm hover:bg-green-700"
+                              onClick={() => { setSelectedOrderForPayment(order); setShowPaymentModal(true); }}
+                              className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
+                              title="View"
+                              data-testid={`view-order-${order.id}`}
                             >
-                              Pay
+                              View
                             </button>
-                          )}
+                            {order.payment_status === 'Pending' && (
+                              <>
+                                <button
+                                  onClick={() => handlePayOrder(order.id)}
+                                  className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
+                                >
+                                  Pay
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm('Cancel this order?')) return;
+                                    try {
+                                      await axios.post(`${API}/restaurant/orders/${order.id}/cancel`);
+                                      fetchOrders();
+                                      alert('Order cancelled');
+                                    } catch (err) {
+                                      alert(err.response?.data?.detail || 'Error cancelling order');
+                                    }
+                                  }}
+                                  className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -9808,48 +9928,61 @@ const Restaurant = () => {
       {/* Payment Modal */}
       {showPaymentModal && selectedOrderForPayment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Process Payment</h3>
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md" data-testid="payment-modal">
+            <h3 className="text-lg font-semibold mb-4 text-white">Process Payment</h3>
             
             {/* Order Details */}
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-gray-900 mb-2">Order Details</h4>
+            <div className="mb-4 p-4 bg-gray-700 rounded-lg">
+              <h4 className="font-medium text-white mb-2">Order Details</h4>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>Order Number:</span>
-                  <span className="font-medium">{selectedOrderForPayment.order_number}</span>
+                  <span className="text-gray-400">Order Number:</span>
+                  <span className="font-medium text-white">{selectedOrderForPayment.order_number}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Customer:</span>
-                  <span className="font-medium">{selectedOrderForPayment.customer_name}</span>
+                  <span className="text-gray-400">Customer:</span>
+                  <span className="font-medium text-white">{selectedOrderForPayment.customer_name}</span>
                 </div>
                 {selectedOrderForPayment.order_type === 'room_service' && (
                   <div className="flex justify-between">
-                    <span>Room:</span>
-                    <span className="font-medium">{selectedOrderForPayment.room_number}</span>
+                    <span className="text-gray-400">Room:</span>
+                    <span className="font-medium text-white">{selectedOrderForPayment.room_number}</span>
                   </div>
                 )}
                 {selectedOrderForPayment.order_type === 'table' && (
                   <div className="flex justify-between">
-                    <span>Table:</span>
-                    <span className="font-medium">{selectedOrderForPayment.table_number}</span>
+                    <span className="text-gray-400">Table:</span>
+                    <span className="font-medium text-white">{selectedOrderForPayment.table_number}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>LKR {selectedOrderForPayment.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax ({hotelSettings.tax_rate || 0}%):</span>
-                  <span>LKR {selectedOrderForPayment.tax_amount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Service Charge:</span>
-                  <span>LKR {selectedOrderForPayment.service_charge.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
-                  <span>Total:</span>
-                  <span>LKR {selectedOrderForPayment.total_amount.toFixed(2)}</span>
+                {/* Item breakdown */}
+                {selectedOrderForPayment.items && (
+                  <div className="mt-2 border-t border-gray-600 pt-2 space-y-1">
+                    {selectedOrderForPayment.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-gray-300">
+                        <span>{item.menu_item_name} x{item.quantity}</span>
+                        <span>LKR {(item.total_price || 0).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-gray-600 pt-2 mt-2 space-y-1">
+                  <div className="flex justify-between text-gray-300">
+                    <span>Subtotal:</span>
+                    <span>LKR {(selectedOrderForPayment.subtotal || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-300">
+                    <span>Tax:</span>
+                    <span>LKR {(selectedOrderForPayment.tax_amount || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-300">
+                    <span>Service Charge:</span>
+                    <span>LKR {(selectedOrderForPayment.service_charge || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg border-t border-gray-600 pt-2 text-green-400">
+                    <span>Total:</span>
+                    <span>LKR {(selectedOrderForPayment.total_amount || 0).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -9862,9 +9995,9 @@ const Restaurant = () => {
                     type="checkbox"
                     checked={paymentData.add_to_room_bill}
                     onChange={(e) => setPaymentData({...paymentData, add_to_room_bill: e.target.checked})}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-600 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-gray-700">Add to Room Bill (will be charged at checkout)</span>
+                  <span className="text-gray-300">Add to Room Bill (will be charged at checkout)</span>
                 </label>
               </div>
             )}
@@ -9872,11 +10005,11 @@ const Restaurant = () => {
             {/* Payment Method Selection */}
             {(!paymentData.add_to_room_bill || selectedOrderForPayment.order_type !== 'room_service') && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
                 <select
                   value={paymentData.payment_method}
                   onChange={(e) => setPaymentData({...paymentData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Card">Card</option>
@@ -9890,18 +10023,16 @@ const Restaurant = () => {
                 onClick={() => {
                   setShowPaymentModal(false);
                   setSelectedOrderForPayment(null);
-                  setPaymentData({
-                    payment_method: 'Cash',
-                    add_to_room_bill: false
-                  });
+                  setPaymentData({ payment_method: 'Cash', add_to_room_bill: false });
                 }}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleProcessPayment}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                data-testid="confirm-payment-btn"
               >
                 {paymentData.add_to_room_bill && selectedOrderForPayment.order_type === 'room_service' 
                   ? 'Add to Room Bill' 
@@ -12212,6 +12343,7 @@ const Settings = () => {
     channel_name: '',
     channel_type: 'OTA',
     commission_rate: 0,
+    auto_rate: true,
     contact_email: '',
     contact_phone: ''
   });
@@ -14243,6 +14375,9 @@ const Settings = () => {
                       Commission Rate
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Auto Rate
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       Contact
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -14274,6 +14409,15 @@ const Settings = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         {channel.commission_rate}%
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          channel.auto_rate !== false
+                            ? 'bg-green-800 text-green-100'
+                            : 'bg-gray-700 text-gray-300'
+                        }`}>
+                          {channel.auto_rate !== false ? 'Auto' : 'Manual'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         <div>
@@ -14387,6 +14531,25 @@ const Settings = () => {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                   placeholder="e.g., 15.5"
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center space-x-3 cursor-pointer" data-testid="auto-rate-toggle">
+                  <div className={`relative w-11 h-6 rounded-full transition-colors ${newChannel.auto_rate ? 'bg-green-500' : 'bg-gray-500'}`}
+                    onClick={() => setNewChannel({...newChannel, auto_rate: !newChannel.auto_rate})}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${newChannel.auto_rate ? 'translate-x-5' : ''}`} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Auto Calculate Commission
+                  </span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-14">
+                  {newChannel.auto_rate 
+                    ? 'Commission will be auto-calculated from booking amount during new bookings'
+                    : 'User will manually enter commission amount'
+                  }
+                </p>
               </div>
 
               <div>
