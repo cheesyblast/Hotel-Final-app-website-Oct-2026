@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useContext, createContext } from "react";
+import React, { useState, useEffect, useContext, createContext, useRef, useCallback } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import axios from "axios";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from 'recharts';
 
 // Countries list for dropdown
 const COUNTRIES = [
@@ -5571,7 +5572,7 @@ const Reports = () => {
   );
 };
 
-// Expenses Component
+// Expenses Component - Enhanced Financial Dashboard
 const Expenses = () => {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
@@ -5582,12 +5583,18 @@ const Expenses = () => {
   const [loading, setLoading] = useState(true);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showAddIncomeModal, setShowAddIncomeModal] = useState(false);
-  const [viewMode, setViewMode] = useState('daily'); // 'daily' or 'monthly'
+  const [activeTab, setActiveTab] = useState('overview');
+  const [dailyReportData, setDailyReportData] = useState(null);
+  const [monthlyReportData, setMonthlyReportData] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [chartData, setChartData] = useState([]);
+  const [showMarkPaidModal, setShowMarkPaidModal] = useState(null);
+  const [markPaidMethod, setMarkPaidMethod] = useState('Cash');
   
-  // Get financial context for cross-component refresh
   const { refreshTrigger } = useFinancial();
   
-  // Pagination state
   const [roomBookingsPage, setRoomBookingsPage] = useState(1);
   const [additionalIncomePage, setAdditionalIncomePage] = useState(1);
   const [expensePage, setExpensePage] = useState(1);
@@ -5598,6 +5605,7 @@ const Expenses = () => {
     amount: 0,
     category: '',
     payment_method: 'Cash',
+    vendor: '',
     expense_date: new Date().toISOString().split('T')[0]
   });
   const [incomeData, setIncomeData] = useState({
@@ -5612,6 +5620,13 @@ const Expenses = () => {
   const [incomeCategories, setIncomeCategories] = useState([]);
   const [newExpenseCategory, setNewExpenseCategory] = useState('');
   const [newIncomeCategory, setNewIncomeCategory] = useState('');
+  const [vendors, setVendors] = useState([]);
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+  const [newVendorName, setNewVendorName] = useState('');
+  const vendorRef = useRef(null);
+
+  const paymentMethods = ['Cash', 'Card', 'Bank Transfer', 'Add to Account'];
 
   const fetchCategories = async () => {
     try {
@@ -5623,6 +5638,28 @@ const Expenses = () => {
       setIncomeCategories(incRes.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchVendors = async (search = '') => {
+    try {
+      const res = await axios.get(`${API}/vendors${search ? `?search=${search}` : ''}`);
+      setVendors(res.data);
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+    }
+  };
+
+  const handleAddVendor = async () => {
+    if (!newVendorName.trim()) return;
+    try {
+      await axios.post(`${API}/vendors`, { name: newVendorName.trim() });
+      setNewVendorName('');
+      fetchVendors();
+      setExpenseData({...expenseData, vendor: newVendorName.trim()});
+      setShowVendorDropdown(false);
+    } catch (error) {
+      alert(error.response?.data?.detail || 'Error adding vendor');
     }
   };
 
@@ -5648,18 +5685,19 @@ const Expenses = () => {
     }
   };
 
-  const paymentMethods = ['Cash', 'Card', 'Bank Transfer'];
-
   useEffect(() => {
     fetchExpenses();
     fetchIncomes();
     fetchCategories();
     fetchDailySales();
-    fetchFinancialSummary();
     fetchDailyFinancialSummary();
+    fetchFinancialSummary();
+    fetchVendors();
+    fetchDailyReport(selectedDate);
+    fetchMonthlyReport(selectedYear, selectedMonth);
+    fetchChartData();
   }, []);
 
-  // Listen for financial refresh triggers from other components
   useEffect(() => {
     if (refreshTrigger > 0) {
       fetchDailyFinancialSummary();
@@ -5667,51 +5705,78 @@ const Expenses = () => {
     }
   }, [refreshTrigger]);
 
+  // Close vendor dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (vendorRef.current && !vendorRef.current.contains(e.target)) {
+        setShowVendorDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchExpenses = async () => {
     try {
       const response = await axios.get(`${API}/expenses`);
       setExpenses(response.data);
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-    }
+    } catch (error) { console.error('Error fetching expenses:', error); }
   };
 
   const fetchIncomes = async () => {
     try {
       const response = await axios.get(`${API}/incomes`);
       setIncomes(response.data);
-    } catch (error) {
-      console.error('Error fetching incomes:', error);
-    }
+    } catch (error) { console.error('Error fetching incomes:', error); }
   };
 
   const fetchDailySales = async () => {
     try {
       const response = await axios.get(`${API}/daily-sales`);
       setDailySales(response.data);
-    } catch (error) {
-      console.error('Error fetching daily sales:', error);
-    }
+    } catch (error) { console.error('Error fetching daily sales:', error); }
   };
 
   const fetchFinancialSummary = async () => {
     try {
       const response = await axios.get(`${API}/financial-summary`);
       setFinancialSummary(response.data);
-    } catch (error) {
-      console.error('Error fetching financial summary:', error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error('Error fetching financial summary:', error); }
+    finally { setLoading(false); }
   };
 
   const fetchDailyFinancialSummary = async () => {
     try {
       const response = await axios.get(`${API}/daily-financial-summary`);
       setDailyFinancialSummary(response.data);
-    } catch (error) {
-      console.error('Error fetching daily financial summary:', error);
-    }
+    } catch (error) { console.error('Error fetching daily financial summary:', error); }
+  };
+
+  const fetchDailyReport = async (dateStr) => {
+    try {
+      const response = await axios.get(`${API}/financial-reports/daily?date=${dateStr}`);
+      setDailyReportData(response.data);
+    } catch (error) { console.error('Error fetching daily report:', error); }
+  };
+
+  const fetchMonthlyReport = async (yr, mo) => {
+    try {
+      const response = await axios.get(`${API}/financial-reports/monthly?year=${yr}&month=${mo}`);
+      setMonthlyReportData(response.data);
+    } catch (error) { console.error('Error fetching monthly report:', error); }
+  };
+
+  const fetchChartData = async () => {
+    try {
+      const response = await axios.get(`${API}/reports/daily`);
+      const last14 = (response.data || []).slice(-14);
+      setChartData(last14.map(d => ({
+        date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        received: d.revenue || 0,
+        paid: d.expenses || 0,
+        net: d.profit || 0
+      })));
+    } catch (error) { console.error('Error fetching chart data:', error); }
   };
 
   const handleAddExpense = async () => {
@@ -5720,90 +5785,15 @@ const Expenses = () => {
         alert('Please fill in all required fields');
         return;
       }
-
       await axios.post(`${API}/expenses`, expenseData);
-      
       setShowAddExpenseModal(false);
-      setExpenseData({
-        description: '',
-        amount: 0,
-        category: '',
-        payment_method: 'Cash',
-        expense_date: ''
-      });
-      
-      // Refresh data after adding expense
-      await fetchExpenses();
-      await fetchFinancialSummary();
-      await fetchDailyFinancialSummary();
+      setExpenseData({ description: '', amount: 0, category: '', payment_method: 'Cash', vendor: '', expense_date: new Date().toISOString().split('T')[0] });
+      await Promise.all([fetchExpenses(), fetchFinancialSummary(), fetchDailyFinancialSummary(), fetchDailyReport(selectedDate), fetchChartData()]);
       alert('Expense added successfully!');
     } catch (error) {
       console.error('Error adding expense:', error);
       alert('Error adding expense. Please try again.');
     }
-  };
-
-  // Pagination helper functions
-  const getPaginatedData = (data, currentPage) => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return data.slice(startIndex, endIndex);
-  };
-
-  const getTotalPages = (data) => {
-    return Math.ceil(data.length / itemsPerPage);
-  };
-
-  const renderPagination = (data, currentPage, setCurrentPage) => {
-    const totalPages = getTotalPages(data);
-    if (totalPages <= 1) return null;
-
-    const pageNumbers = [];
-    for (let i = 1; i <= totalPages; i++) {
-      pageNumbers.push(i);
-    }
-
-    return (
-      <div className="flex justify-center items-center space-x-2 mt-4">
-        <button
-          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-          disabled={currentPage === 1}
-          className={`px-3 py-1 rounded ${
-            currentPage === 1
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
-          }`}
-        >
-          Previous
-        </button>
-        
-        {pageNumbers.map((pageNum) => (
-          <button
-            key={pageNum}
-            onClick={() => setCurrentPage(pageNum)}
-            className={`px-3 py-1 rounded ${
-              currentPage === pageNum
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {pageNum}
-          </button>
-        ))}
-        
-        <button
-          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-          disabled={currentPage === totalPages}
-          className={`px-3 py-1 rounded ${
-            currentPage === totalPages
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
-          }`}
-        >
-          Next
-        </button>
-      </div>
-    );
   };
 
   const handleAddIncome = async () => {
@@ -5812,23 +5802,10 @@ const Expenses = () => {
         alert('Please fill in all required fields');
         return;
       }
-
       await axios.post(`${API}/incomes`, incomeData);
-      
       setShowAddIncomeModal(false);
-      setIncomeData({
-        description: '',
-        amount: 0,
-        category: '',
-        payment_method: 'Cash',
-        income_date: ''
-      });
-      
-      // Refresh data after adding income
-      await fetchIncomes();
-      await fetchDailySales();
-      await fetchFinancialSummary();
-      await fetchDailyFinancialSummary();
+      setIncomeData({ description: '', amount: 0, category: '', payment_method: 'Cash', income_date: new Date().toISOString().split('T')[0] });
+      await Promise.all([fetchIncomes(), fetchDailySales(), fetchFinancialSummary(), fetchDailyFinancialSummary(), fetchDailyReport(selectedDate), fetchChartData()]);
       alert('Income added successfully!');
     } catch (error) {
       console.error('Error adding income:', error);
@@ -5840,14 +5817,9 @@ const Expenses = () => {
     if (window.confirm('Are you sure you want to delete this expense?')) {
       try {
         await axios.delete(`${API}/expenses/${expenseId}`);
-        await fetchExpenses();
-        await fetchFinancialSummary();
-        await fetchDailyFinancialSummary();
+        await Promise.all([fetchExpenses(), fetchFinancialSummary(), fetchDailyFinancialSummary()]);
         alert('Expense deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting expense:', error);
-        alert('Error deleting expense. Please try again.');
-      }
+      } catch (error) { alert('Error deleting expense.'); }
     }
   };
 
@@ -5855,518 +5827,896 @@ const Expenses = () => {
     if (window.confirm('Are you sure you want to delete this income record?')) {
       try {
         await axios.delete(`${API}/incomes/${id}`);
-        await fetchIncomes();
-        await fetchDailySales();
-        await fetchFinancialSummary();
-        await fetchDailyFinancialSummary();
+        await Promise.all([fetchIncomes(), fetchDailySales(), fetchFinancialSummary(), fetchDailyFinancialSummary()]);
         alert('Income record deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting income:', error);
-        alert('Error deleting income record. Please try again.');
-      }
+      } catch (error) { alert('Error deleting income record.'); }
     }
   };
 
-  const getCategoryColor = (category) => {
-    const colors = {
-      'Utilities': 'bg-blue-100 text-blue-800',
-      'Maintenance': 'bg-orange-100 text-orange-800',
-      'Staff': 'bg-green-100 text-green-800',
-      'Food': 'bg-purple-100 text-purple-800',
-      'Marketing': 'bg-pink-100 text-pink-800',
-      'Supplies': 'bg-yellow-100 text-yellow-800',
-      'Insurance': 'bg-indigo-100 text-indigo-800',
-      'Other': 'bg-gray-100 text-gray-800'
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800';
+  const handleMarkPaid = async (expenseId) => {
+    try {
+      await axios.put(`${API}/expenses/${expenseId}/mark-paid`, { payment_method: markPaidMethod });
+      setShowMarkPaidModal(null);
+      await Promise.all([fetchExpenses(), fetchFinancialSummary(), fetchDailyFinancialSummary()]);
+      alert('Expense marked as paid!');
+    } catch (error) { alert('Error marking expense as paid.'); }
   };
+
+  const handleDateChange = (e) => {
+    setSelectedDate(e.target.value);
+    fetchDailyReport(e.target.value);
+  };
+
+  const handleMonthChange = (yr, mo) => {
+    setSelectedYear(yr);
+    setSelectedMonth(mo);
+    fetchMonthlyReport(yr, mo);
+  };
+
+  // Download functions
+  const downloadDailyExcel = () => {
+    if (!dailyReportData) return;
+    const wb = XLSX.utils.book_new();
+    const summaryRows = [
+      { Item: 'DAILY SALES REPORT', Value: '' },
+      { Item: `Date: ${dailyReportData.date}`, Value: '' },
+      { Item: '', Value: '' },
+      { Item: 'AMOUNTS RECEIVED', Value: '' },
+      { Item: 'Cash Received', Value: dailyReportData.received?.cash || 0 },
+      { Item: 'Bank Received', Value: dailyReportData.received?.bank || 0 },
+      { Item: 'Total Received', Value: dailyReportData.received?.total || 0 },
+      { Item: '', Value: '' },
+      { Item: 'AMOUNTS PAID', Value: '' },
+      { Item: 'Cash Paid', Value: dailyReportData.paid?.cash || 0 },
+      { Item: 'Bank Paid', Value: dailyReportData.paid?.bank || 0 },
+      { Item: 'Total Paid', Value: dailyReportData.paid?.total || 0 },
+      { Item: '', Value: '' },
+      { Item: 'PENDING', Value: '' },
+      { Item: 'Pending Receivables', Value: dailyReportData.pending_receivables?.total || 0 },
+      { Item: 'Pending Payables', Value: dailyReportData.pending_payables?.total || 0 },
+      { Item: '', Value: '' },
+      { Item: 'NET POSITION', Value: dailyReportData.net_position || 0 },
+    ];
+    const ws = XLSX.utils.json_to_sheet(summaryRows);
+    ws['!cols'] = [{ width: 25 }, { width: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+
+    if (dailyReportData.received?.details?.length > 0) {
+      const incWs = XLSX.utils.json_to_sheet(dailyReportData.received.details);
+      XLSX.utils.book_append_sheet(wb, incWs, 'Received');
+    }
+    if (dailyReportData.paid?.details?.length > 0) {
+      const expWs = XLSX.utils.json_to_sheet(dailyReportData.paid.details);
+      XLSX.utils.book_append_sheet(wb, expWs, 'Paid');
+    }
+    if (dailyReportData.pending_receivables?.details?.length > 0) {
+      const recWs = XLSX.utils.json_to_sheet(dailyReportData.pending_receivables.details);
+      XLSX.utils.book_append_sheet(wb, recWs, 'Receivables');
+    }
+    if (dailyReportData.pending_payables?.details?.length > 0) {
+      const payWs = XLSX.utils.json_to_sheet(dailyReportData.pending_payables.details);
+      XLSX.utils.book_append_sheet(wb, payWs, 'Payables');
+    }
+    XLSX.writeFile(wb, `Daily_Sales_Report_${dailyReportData.date}.xlsx`);
+  };
+
+  const downloadMonthlyExcel = () => {
+    if (!monthlyReportData) return;
+    const wb = XLSX.utils.book_new();
+
+    // Day-by-day sheet
+    const dayRows = monthlyReportData.daily_breakdown?.map(d => ({
+      Date: d.date,
+      'Received (Cash)': d.received_cash,
+      'Received (Bank)': d.received_bank,
+      'Total Received': d.total_received,
+      'Paid (Cash)': d.paid_cash,
+      'Paid (Bank)': d.paid_bank,
+      'Total Paid': d.total_paid,
+      'Pending Payables': d.pending_payables,
+      'Net Balance': d.net_balance,
+      'Transactions': d.transactions
+    })) || [];
+    
+    const gt = monthlyReportData.grand_totals || {};
+    dayRows.push({
+      Date: 'GRAND TOTAL',
+      'Received (Cash)': gt.received_cash,
+      'Received (Bank)': gt.received_bank,
+      'Total Received': gt.total_received,
+      'Paid (Cash)': gt.paid_cash,
+      'Paid (Bank)': gt.paid_bank,
+      'Total Paid': gt.total_paid,
+      'Pending Payables': gt.pending_payables,
+      'Net Balance': gt.net_balance,
+      'Transactions': ''
+    });
+
+    const dayWs = XLSX.utils.json_to_sheet(dayRows);
+    dayWs['!cols'] = Array(10).fill({ width: 16 });
+    XLSX.utils.book_append_sheet(wb, dayWs, 'Daily Breakdown');
+
+    if (monthlyReportData.income_details?.length > 0) {
+      const incWs = XLSX.utils.json_to_sheet(monthlyReportData.income_details);
+      XLSX.utils.book_append_sheet(wb, incWs, 'Income Details');
+    }
+    if (monthlyReportData.expense_details?.length > 0) {
+      const expWs = XLSX.utils.json_to_sheet(monthlyReportData.expense_details);
+      XLSX.utils.book_append_sheet(wb, expWs, 'Expense Details');
+    }
+    XLSX.writeFile(wb, `Monthly_Sales_Report_${monthlyReportData.month?.replace(' ', '_')}.xlsx`);
+  };
+
+  const downloadDailyPDF = () => {
+    if (!dailyReportData) return;
+    const doc = new jsPDF();
+    const pw = doc.internal.pageSize.getWidth();
+    doc.setFontSize(18);
+    doc.text('Daily Sales Report', pw / 2, 18, { align: 'center' });
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Date: ${dailyReportData.date}`, pw / 2, 26, { align: 'center' });
+    doc.setTextColor(33, 37, 41);
+    doc.autoTable({
+      startY: 34,
+      head: [['Category', 'Amount (LKR)']],
+      body: [
+        ['Cash Received', (dailyReportData.received?.cash || 0).toLocaleString()],
+        ['Bank Received', (dailyReportData.received?.bank || 0).toLocaleString()],
+        ['Total Received', (dailyReportData.received?.total || 0).toLocaleString()],
+        ['Cash Paid', (dailyReportData.paid?.cash || 0).toLocaleString()],
+        ['Bank Paid', (dailyReportData.paid?.bank || 0).toLocaleString()],
+        ['Total Paid', (dailyReportData.paid?.total || 0).toLocaleString()],
+        ['Pending Receivables', (dailyReportData.pending_receivables?.total || 0).toLocaleString()],
+        ['Pending Payables', (dailyReportData.pending_payables?.total || 0).toLocaleString()],
+        ['Net Position', (dailyReportData.net_position || 0).toLocaleString()],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [16, 185, 129] },
+    });
+    doc.save(`Daily_Sales_Report_${dailyReportData.date}.pdf`);
+  };
+
+  const downloadMonthlyPDF = () => {
+    if (!monthlyReportData) return;
+    const doc = new jsPDF('landscape');
+    const pw = doc.internal.pageSize.getWidth();
+    doc.setFontSize(18);
+    doc.text('Monthly Sales Report', pw / 2, 18, { align: 'center' });
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(monthlyReportData.month || '', pw / 2, 26, { align: 'center' });
+    doc.setTextColor(33, 37, 41);
+    
+    const rows = (monthlyReportData.daily_breakdown || []).map(d => [
+      d.date, d.received_cash, d.received_bank, d.total_received,
+      d.paid_cash, d.paid_bank, d.total_paid, d.pending_payables, d.net_balance
+    ]);
+    const gt = monthlyReportData.grand_totals || {};
+    rows.push(['TOTAL', gt.received_cash, gt.received_bank, gt.total_received,
+      gt.paid_cash, gt.paid_bank, gt.total_paid, gt.pending_payables, gt.net_balance]);
+    
+    doc.autoTable({
+      startY: 34,
+      head: [['Date', 'Rcvd Cash', 'Rcvd Bank', 'Total Rcvd', 'Paid Cash', 'Paid Bank', 'Total Paid', 'Pending Pay', 'Net']],
+      body: rows,
+      theme: 'striped',
+      headStyles: { fillColor: [139, 92, 246] },
+      styles: { fontSize: 7 }
+    });
+    doc.save(`Monthly_Sales_Report_${monthlyReportData.month?.replace(' ', '_')}.pdf`);
+  };
+
+  const getPaginatedData = (data, currentPage) => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return data.slice(startIndex, startIndex + itemsPerPage);
+  };
+
+  const getTotalPages = (data) => Math.ceil(data.length / itemsPerPage);
+
+  const renderPagination = (data, currentPage, setCurrentPage) => {
+    const totalPages = getTotalPages(data);
+    if (totalPages <= 1) return null;
+    return (
+      <div className="flex justify-center items-center space-x-2 mt-4 pb-4">
+        <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
+          className={`px-3 py-1 rounded text-sm ${currentPage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>Prev</button>
+        <span className="text-sm text-gray-400">{currentPage} / {totalPages}</span>
+        <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
+          className={`px-3 py-1 rounded text-sm ${currentPage === totalPages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>Next</button>
+      </div>
+    );
+  };
+
+  const formatCurrency = (amount) => `LKR ${(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const filteredVendors = vendors.filter(v => v.toLowerCase().includes((expenseData.vendor || '').toLowerCase()));
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header - Gradient Style */}
-      <div className="bg-gradient-to-r from-green-800 to-emerald-600 rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-gray-900 via-emerald-950 to-gray-900 rounded-xl p-6 mb-6 border border-emerald-800/30">
+        <div className="flex justify-between items-center flex-wrap gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Income & Expenses</h2>
-            <p className="text-green-200">Financial management and balance tracking</p>
+            <h2 className="text-2xl font-bold text-white mb-1" data-testid="inc-exp-title">Income & Expenses</h2>
+            <p className="text-emerald-400/80 text-sm">Financial tracking, daily sales & reporting</p>
           </div>
           <div className="flex space-x-3">
-            <button 
-              onClick={() => setShowAddIncomeModal(true)}
-              className="bg-white text-green-800 px-4 py-2 rounded-lg hover:bg-green-100 flex items-center font-medium"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
+            <button onClick={() => setShowAddIncomeModal(true)} data-testid="add-income-btn"
+              className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center font-medium text-sm transition-colors">
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
               Add Income
             </button>
-            <button 
-              onClick={() => setShowAddExpenseModal(true)}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center font-medium"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
+            <button onClick={() => setShowAddExpenseModal(true)} data-testid="add-expense-btn"
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center font-medium text-sm transition-colors">
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
               Add Expense
             </button>
           </div>
         </div>
+        {/* Tabs */}
+        <div className="flex space-x-1 mt-5 bg-gray-800/50 rounded-lg p-1 max-w-fit">
+          {[
+            { key: 'overview', label: 'Overview' },
+            { key: 'daily', label: 'Daily Sales' },
+            { key: 'monthly', label: 'Monthly Sales' },
+            { key: 'records', label: 'Records' },
+          ].map(tab => (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} data-testid={`tab-${tab.key}`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === tab.key ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'}`}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Financial Summary Cards */}
-      {dailyFinancialSummary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-green-900 border border-green-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-green-300 mb-2">Total Revenue</h3>
-            <p className="text-3xl font-bold text-green-100">LKR {dailyFinancialSummary.total_revenue.toFixed(2)}</p>
-            <p className="text-sm text-green-400">Today ({new Date(dailyFinancialSummary.date).toLocaleDateString()})</p>
-          </div>
-          <div className="bg-red-900 border border-red-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-red-300 mb-2">Total Expenses</h3>
-            <p className="text-3xl font-bold text-red-100">LKR {dailyFinancialSummary.total_expenses.toFixed(2)}</p>
-            <p className="text-sm text-red-400">Today ({new Date(dailyFinancialSummary.date).toLocaleDateString()})</p>
-          </div>
-          <div className="bg-blue-900 border border-blue-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-300 mb-2">Cash Balance</h3>
-            <p className="text-3xl font-bold text-blue-100">LKR {dailyFinancialSummary.cash_balance.toFixed(2)}</p>
-            <p className="text-sm text-blue-400">Running balance</p>
-          </div>
-          <div className="bg-purple-900 border border-purple-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-purple-300 mb-2">Bank Balance</h3>
-            <p className="text-3xl font-bold text-purple-100">LKR {dailyFinancialSummary.bank_balance.toFixed(2)}</p>
-            <p className="text-sm text-purple-400">Card + Bank Transfer</p>
-          </div>
-        </div>
-      )}
-
-      {/* Expenses Table */}
-      <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 mb-8">
-        <div className="px-6 py-4 border-b border-gray-700">
-          <h3 className="text-lg font-semibold text-white">Expense Records</h3>
-        </div>
-        {expenses.length === 0 ? (
-          <div className="p-6 text-center text-gray-400">
-            No expenses recorded
-          </div>
-        ) : (
-          <div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Created By
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {getPaginatedData(expenses, expensePage).map((expense) => (
-                    <tr key={expense.id} className="hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-white">{expense.description}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-red-400">LKR {expense.amount.toFixed(2)}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoryColor(expense.category)}`}>
-                          {expense.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-white">{expense.expense_date}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-300">{expense.created_by}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleDeleteExpense(expense.id)}
-                          className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {renderPagination(expenses, expensePage, setExpensePage)}
-          </div>
-        )}
-      </div>
-
-      {/* Income Records Section */}
-      <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-white mb-4">Income Records</h3>
-        
-        {/* Room Bookings Income */}
-        <div className="mb-6">
-          <h4 className="text-md font-medium text-green-400 mb-3">Room Bookings</h4>
-          {dailySales && dailySales.length > 0 ? (
-            <div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-green-900">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Guest</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Room</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Payment Method</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-green-300 uppercase tracking-wider">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {getPaginatedData(dailySales, roomBookingsPage).map((sale, index) => (
-                      <tr key={index} className="hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">
-                            {new Date(sale.date).toLocaleDateString()}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">{sale.customer_name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">{sale.room_number}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">{sale.payment_method}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-bold text-green-400">LKR {sale.total_amount.toFixed(2)}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {/* === OVERVIEW TAB === */}
+      {activeTab === 'overview' && (
+        <>
+          {/* Summary Cards */}
+          {dailyFinancialSummary && (
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+              <div className="bg-gray-800 border border-emerald-700/30 rounded-xl p-4" data-testid="card-revenue">
+                <p className="text-xs text-emerald-400 font-medium uppercase tracking-wider mb-1">Today's Received</p>
+                <p className="text-xl font-bold text-emerald-300">{formatCurrency(dailyFinancialSummary.total_revenue)}</p>
               </div>
-              {renderPagination(dailySales, roomBookingsPage, setRoomBookingsPage)}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              No room booking income recorded
+              <div className="bg-gray-800 border border-red-700/30 rounded-xl p-4" data-testid="card-expenses">
+                <p className="text-xs text-red-400 font-medium uppercase tracking-wider mb-1">Today's Paid</p>
+                <p className="text-xl font-bold text-red-300">{formatCurrency(dailyFinancialSummary.total_expenses)}</p>
+              </div>
+              <div className="bg-gray-800 border border-blue-700/30 rounded-xl p-4" data-testid="card-cash">
+                <p className="text-xs text-blue-400 font-medium uppercase tracking-wider mb-1">Cash Balance</p>
+                <p className="text-xl font-bold text-blue-300">{formatCurrency(dailyFinancialSummary.cash_balance)}</p>
+              </div>
+              <div className="bg-gray-800 border border-violet-700/30 rounded-xl p-4" data-testid="card-bank">
+                <p className="text-xs text-violet-400 font-medium uppercase tracking-wider mb-1">Bank Balance</p>
+                <p className="text-xl font-bold text-violet-300">{formatCurrency(dailyFinancialSummary.bank_balance)}</p>
+              </div>
+              <div className="bg-gray-800 border border-amber-700/30 rounded-xl p-4" data-testid="card-receivables">
+                <p className="text-xs text-amber-400 font-medium uppercase tracking-wider mb-1">Receivables</p>
+                <p className="text-xl font-bold text-amber-300">{formatCurrency(dailyFinancialSummary.pending_receivables || 0)}</p>
+              </div>
+              <div className="bg-gray-800 border border-orange-700/30 rounded-xl p-4" data-testid="card-payables">
+                <p className="text-xs text-orange-400 font-medium uppercase tracking-wider mb-1">Payables</p>
+                <p className="text-xl font-bold text-orange-300">{formatCurrency(dailyFinancialSummary.pending_payables || 0)}</p>
+              </div>
             </div>
           )}
-        </div>
 
-        {/* Additional Income */}
+          {/* Chart: Last 14 Days */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700/50 p-6 mb-6">
+            <h3 className="text-base font-semibold text-white mb-4">Daily Revenue & Expenses (Last 14 Days)</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="date" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value) => formatCurrency(value)} />
+                  <Legend wrapperStyle={{ color: '#9CA3AF', fontSize: 12 }} />
+                  <Bar dataKey="received" name="Received" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="paid" name="Paid" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Net Growth Area Chart */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700/50 p-6 mb-6">
+            <h3 className="text-base font-semibold text-white mb-4">Net Profit Trend</h3>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="date" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value) => formatCurrency(value)} />
+                  <Area type="monotone" dataKey="net" name="Net Profit" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* === DAILY SALES TAB === */}
+      {activeTab === 'daily' && (
         <div>
-          <h4 className="text-md font-medium text-blue-400 mb-3">Additional Income</h4>
-          {incomes && incomes.length > 0 ? (
-            <div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-blue-900">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Description</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-blue-300 uppercase tracking-wider">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {getPaginatedData(incomes, additionalIncomePage).map((income, index) => (
-                      <tr key={index} className="hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">
-                            {new Date(income.income_date).toLocaleDateString()}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">{income.description}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-400">{income.category}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-bold text-green-400">LKR {income.amount.toFixed(2)}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => handleDeleteIncome(income.id)}
-                            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {renderPagination(incomes, additionalIncomePage, setAdditionalIncomePage)}
+          {/* Date Picker & Download */}
+          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+            <div className="flex items-center space-x-3">
+              <label className="text-sm text-gray-300">Select Date:</label>
+              <input type="date" value={selectedDate} onChange={handleDateChange} data-testid="daily-date-picker"
+                className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              No additional income recorded
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Add Expense Modal */}
-      {showAddExpenseModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-white mb-4">Add New Expense</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Description *
-                </label>
-                <input
-                  type="text"
-                  value={expenseData.description}
-                  onChange={(e) => setExpenseData({...expenseData, description: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter expense description"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Amount (LKR) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={expenseData.amount}
-                  onChange={(e) => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Category *
-                </label>
-                <select
-                  value={expenseData.category}
-                  onChange={(e) => setExpenseData({...expenseData, category: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select category</option>
-                  {expenseCategories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-                {user?.role === 'Admin' && (
-                  <div className="flex mt-2 space-x-2">
-                    <input
-                      type="text"
-                      value={newExpenseCategory}
-                      onChange={(e) => setNewExpenseCategory(e.target.value)}
-                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="New category name"
-                    />
-                    <button
-                      onClick={handleAddExpenseCategory}
-                      disabled={!newExpenseCategory.trim()}
-                      className="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 disabled:opacity-50"
-                      data-testid="add-expense-category-btn"
-                    >
-                      + Add
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Payment Method *
-                </label>
-                <select
-                  value={expenseData.payment_method}
-                  onChange={(e) => setExpenseData({...expenseData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  {paymentMethods.map(method => (
-                    <option key={method} value={method}>{method}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">
-                  This will deduct from {expenseData.payment_method === 'Cash' ? 'Cash Balance' : 'Bank Balance'}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Date *
-                </label>
-                <input
-                  type="date"
-                  value={expenseData.expense_date}
-                  onChange={(e) => setExpenseData({...expenseData, expense_date: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowAddExpenseModal(false)}
-                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
-              >
-                Cancel
+            <div className="flex space-x-2">
+              <button onClick={downloadDailyExcel} data-testid="download-daily-excel"
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span>Excel</span>
               </button>
-              <button
-                onClick={handleAddExpense}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Add Expense
+              <button onClick={downloadDailyPDF} data-testid="download-daily-pdf"
+                className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                <span>PDF</span>
               </button>
             </div>
           </div>
+
+          {dailyReportData ? (
+            <>
+              {/* Daily Summary Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                <div className="bg-emerald-900/40 border border-emerald-700/40 rounded-xl p-4">
+                  <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Received</p>
+                  <p className="text-lg font-bold text-emerald-300">{formatCurrency(dailyReportData.received?.total)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Cash: {formatCurrency(dailyReportData.received?.cash)} | Bank: {formatCurrency(dailyReportData.received?.bank)}</p>
+                </div>
+                <div className="bg-red-900/40 border border-red-700/40 rounded-xl p-4">
+                  <p className="text-xs text-red-400 uppercase tracking-wider mb-1">Paid</p>
+                  <p className="text-lg font-bold text-red-300">{formatCurrency(dailyReportData.paid?.total)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Cash: {formatCurrency(dailyReportData.paid?.cash)} | Bank: {formatCurrency(dailyReportData.paid?.bank)}</p>
+                </div>
+                <div className="bg-amber-900/40 border border-amber-700/40 rounded-xl p-4">
+                  <p className="text-xs text-amber-400 uppercase tracking-wider mb-1">Receivables</p>
+                  <p className="text-lg font-bold text-amber-300">{formatCurrency(dailyReportData.pending_receivables?.total)}</p>
+                </div>
+                <div className="bg-orange-900/40 border border-orange-700/40 rounded-xl p-4">
+                  <p className="text-xs text-orange-400 uppercase tracking-wider mb-1">Payables</p>
+                  <p className="text-lg font-bold text-orange-300">{formatCurrency(dailyReportData.pending_payables?.total)}</p>
+                </div>
+                <div className={`${(dailyReportData.net_position || 0) >= 0 ? 'bg-blue-900/40 border-blue-700/40' : 'bg-orange-900/40 border-orange-700/40'} border rounded-xl p-4`}>
+                  <p className="text-xs text-blue-400 uppercase tracking-wider mb-1">Net Position</p>
+                  <p className={`text-lg font-bold ${(dailyReportData.net_position || 0) >= 0 ? 'text-blue-300' : 'text-orange-300'}`}>{formatCurrency(dailyReportData.net_position)}</p>
+                </div>
+              </div>
+
+              {/* Received Details */}
+              {dailyReportData.received?.details?.length > 0 && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-4">
+                  <div className="px-5 py-3 border-b border-gray-700"><h4 className="text-sm font-semibold text-emerald-400">Amounts Received</h4></div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700" data-testid="received-table">
+                      <thead className="bg-gray-750"><tr>
+                        {['Type', 'Description', 'Category', 'Amount', 'Payment'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-700/50">
+                        {dailyReportData.received.details.map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-700/30">
+                            <td className="px-4 py-2 text-sm text-gray-300">{d.Type}</td>
+                            <td className="px-4 py-2 text-sm text-white">{d.Description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d.Category}</td>
+                            <td className="px-4 py-2 text-sm font-medium text-emerald-400">{formatCurrency(d.Amount)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d['Payment Method']}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Paid Details */}
+              {dailyReportData.paid?.details?.length > 0 && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-4">
+                  <div className="px-5 py-3 border-b border-gray-700"><h4 className="text-sm font-semibold text-red-400">Amounts Paid</h4></div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700" data-testid="paid-table">
+                      <thead className="bg-gray-750"><tr>
+                        {['Description', 'Category', 'Vendor', 'Amount', 'Payment'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-700/50">
+                        {dailyReportData.paid.details.map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-700/30">
+                            <td className="px-4 py-2 text-sm text-white">{d.Description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d.Category}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d.Vendor || '-'}</td>
+                            <td className="px-4 py-2 text-sm font-medium text-red-400">{formatCurrency(d.Amount)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d['Payment Method']}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending Receivables */}
+              {dailyReportData.pending_receivables?.details?.length > 0 && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-4">
+                  <div className="px-5 py-3 border-b border-gray-700"><h4 className="text-sm font-semibold text-amber-400">Pending Receivables</h4></div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700" data-testid="receivables-table">
+                      <thead className="bg-gray-750"><tr>
+                        {['Guest', 'Room', 'Booking Amount', 'Advance Paid', 'Pending Amount', 'Info'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-700/50">
+                        {dailyReportData.pending_receivables.details.map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-700/30">
+                            <td className="px-4 py-2 text-sm text-white">{d.Guest}</td>
+                            <td className="px-4 py-2 text-sm text-gray-300">{d.Room}</td>
+                            <td className="px-4 py-2 text-sm text-gray-300">{formatCurrency(d['Booking Amount'])}</td>
+                            <td className="px-4 py-2 text-sm text-gray-300">{formatCurrency(d['Advance Paid'])}</td>
+                            <td className="px-4 py-2 text-sm font-medium text-amber-400">{formatCurrency(d['Pending Amount'])}</td>
+                            <td className="px-4 py-2 text-sm text-gray-500">{d['Check In']}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending Payables */}
+              {dailyReportData.pending_payables?.details?.length > 0 && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-4">
+                  <div className="px-5 py-3 border-b border-gray-700"><h4 className="text-sm font-semibold text-orange-400">Pending Payables</h4></div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700" data-testid="payables-table">
+                      <thead className="bg-gray-750"><tr>
+                        {['Type', 'Description', 'Vendor', 'Category', 'Amount', 'Date'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-700/50">
+                        {dailyReportData.pending_payables.details.map((d, i) => (
+                          <tr key={i} className="hover:bg-gray-700/30">
+                            <td className="px-4 py-2 text-sm text-gray-300">{d.Type}</td>
+                            <td className="px-4 py-2 text-sm text-white">{d.Description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d.Vendor}</td>
+                            <td className="px-4 py-2 text-sm text-gray-400">{d.Category}</td>
+                            <td className="px-4 py-2 text-sm font-medium text-orange-400">{formatCurrency(d.Amount)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-500">{d.Date}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* No data message */}
+              {(!dailyReportData.received?.details?.length && !dailyReportData.paid?.details?.length) && (
+                <div className="bg-gray-800 rounded-xl border border-gray-700/50 p-8 text-center text-gray-400">No transactions found for this date</div>
+              )}
+            </>
+          ) : (
+            <div className="bg-gray-800 rounded-xl border border-gray-700/50 p-8 text-center text-gray-400">Loading daily report...</div>
+          )}
         </div>
       )}
 
-      {/* Add Income Modal */}
-      {showAddIncomeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-white mb-4">Add New Income</h3>
-            
+      {/* === MONTHLY SALES TAB === */}
+      {activeTab === 'monthly' && (
+        <div>
+          {/* Month/Year Picker & Download */}
+          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+            <div className="flex items-center space-x-3">
+              <select value={selectedMonth} onChange={(e) => handleMonthChange(selectedYear, parseInt(e.target.value))} data-testid="monthly-month-select"
+                className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm">
+                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                  <option key={i} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select value={selectedYear} onChange={(e) => handleMonthChange(parseInt(e.target.value), selectedMonth)} data-testid="monthly-year-select"
+                className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm">
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <div className="flex space-x-2">
+              <button onClick={downloadMonthlyExcel} data-testid="download-monthly-excel"
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span>Excel</span>
+              </button>
+              <button onClick={downloadMonthlyPDF} data-testid="download-monthly-pdf"
+                className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                <span>PDF</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Grand Totals Summary */}
+          {monthlyReportData?.grand_totals && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-emerald-900/40 border border-emerald-700/40 rounded-xl p-4">
+                <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Total Received</p>
+                <p className="text-lg font-bold text-emerald-300">{formatCurrency(monthlyReportData.grand_totals.total_received)}</p>
+              </div>
+              <div className="bg-red-900/40 border border-red-700/40 rounded-xl p-4">
+                <p className="text-xs text-red-400 uppercase tracking-wider mb-1">Total Paid</p>
+                <p className="text-lg font-bold text-red-300">{formatCurrency(monthlyReportData.grand_totals.total_paid)}</p>
+              </div>
+              <div className="bg-orange-900/40 border border-orange-700/40 rounded-xl p-4">
+                <p className="text-xs text-orange-400 uppercase tracking-wider mb-1">Pending Payables</p>
+                <p className="text-lg font-bold text-orange-300">{formatCurrency(monthlyReportData.grand_totals.pending_payables)}</p>
+              </div>
+              <div className={`${(monthlyReportData.grand_totals.net_balance || 0) >= 0 ? 'bg-blue-900/40 border-blue-700/40' : 'bg-orange-900/40 border-orange-700/40'} border rounded-xl p-4`}>
+                <p className="text-xs text-blue-400 uppercase tracking-wider mb-1">Net Balance</p>
+                <p className={`text-lg font-bold ${(monthlyReportData.grand_totals.net_balance || 0) >= 0 ? 'text-blue-300' : 'text-orange-300'}`}>{formatCurrency(monthlyReportData.grand_totals.net_balance)}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Monthly Chart */}
+          {monthlyReportData?.daily_breakdown && (
+            <div className="bg-gray-800 rounded-xl border border-gray-700/50 p-6 mb-6">
+              <h3 className="text-sm font-semibold text-white mb-4">Monthly Growth ({monthlyReportData.month})</h3>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyReportData.daily_breakdown.filter(d => d.total_received > 0 || d.total_paid > 0)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 10 }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                      formatter={(value) => formatCurrency(value)} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="total_received" name="Received" fill="#10B981" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="total_paid" name="Paid" fill="#EF4444" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Day-by-Day Table */}
+          {monthlyReportData?.daily_breakdown && (
+            <div className="bg-gray-800 rounded-xl border border-gray-700/50">
+              <div className="px-5 py-3 border-b border-gray-700">
+                <h4 className="text-sm font-semibold text-white">Day-by-Day Ledger — {monthlyReportData.month}</h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700 text-xs" data-testid="monthly-ledger-table">
+                  <thead className="bg-gray-750"><tr>
+                    {['Date', 'Rcvd (Cash)', 'Rcvd (Bank)', 'Total Rcvd', 'Paid (Cash)', 'Paid (Bank)', 'Total Paid', 'Pending', 'Net Balance'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-medium text-gray-400 uppercase">{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {monthlyReportData.daily_breakdown.map((d, i) => (
+                      <tr key={i} className={`hover:bg-gray-700/30 ${d.total_received > 0 || d.total_paid > 0 ? '' : 'opacity-40'}`}>
+                        <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{d.date}</td>
+                        <td className="px-3 py-2 text-emerald-400">{d.received_cash > 0 ? formatCurrency(d.received_cash) : '-'}</td>
+                        <td className="px-3 py-2 text-emerald-400">{d.received_bank > 0 ? formatCurrency(d.received_bank) : '-'}</td>
+                        <td className="px-3 py-2 font-medium text-emerald-300">{d.total_received > 0 ? formatCurrency(d.total_received) : '-'}</td>
+                        <td className="px-3 py-2 text-red-400">{d.paid_cash > 0 ? formatCurrency(d.paid_cash) : '-'}</td>
+                        <td className="px-3 py-2 text-red-400">{d.paid_bank > 0 ? formatCurrency(d.paid_bank) : '-'}</td>
+                        <td className="px-3 py-2 font-medium text-red-300">{d.total_paid > 0 ? formatCurrency(d.total_paid) : '-'}</td>
+                        <td className="px-3 py-2 text-orange-400">{d.pending_payables > 0 ? formatCurrency(d.pending_payables) : '-'}</td>
+                        <td className={`px-3 py-2 font-medium ${d.net_balance >= 0 ? 'text-blue-300' : 'text-orange-300'}`}>
+                          {d.net_balance !== 0 ? formatCurrency(d.net_balance) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Grand Total Row */}
+                    {monthlyReportData.grand_totals && (
+                      <tr className="bg-gray-700/60 font-bold">
+                        <td className="px-3 py-3 text-white">TOTAL</td>
+                        <td className="px-3 py-3 text-emerald-400">{formatCurrency(monthlyReportData.grand_totals.received_cash)}</td>
+                        <td className="px-3 py-3 text-emerald-400">{formatCurrency(monthlyReportData.grand_totals.received_bank)}</td>
+                        <td className="px-3 py-3 text-emerald-300">{formatCurrency(monthlyReportData.grand_totals.total_received)}</td>
+                        <td className="px-3 py-3 text-red-400">{formatCurrency(monthlyReportData.grand_totals.paid_cash)}</td>
+                        <td className="px-3 py-3 text-red-400">{formatCurrency(monthlyReportData.grand_totals.paid_bank)}</td>
+                        <td className="px-3 py-3 text-red-300">{formatCurrency(monthlyReportData.grand_totals.total_paid)}</td>
+                        <td className="px-3 py-3 text-orange-400">{formatCurrency(monthlyReportData.grand_totals.pending_payables)}</td>
+                        <td className={`px-3 py-3 ${(monthlyReportData.grand_totals.net_balance || 0) >= 0 ? 'text-blue-300' : 'text-orange-300'}`}>
+                          {formatCurrency(monthlyReportData.grand_totals.net_balance)}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === RECORDS TAB === */}
+      {activeTab === 'records' && (
+        <>
+          {/* Expense Records */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-6">
+            <div className="px-5 py-3 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="text-sm font-semibold text-white">Expense Records</h3>
+              <span className="text-xs text-gray-400">{expenses.length} records</span>
+            </div>
+            {expenses.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">No expenses recorded</div>
+            ) : (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-700" data-testid="expense-records-table">
+                    <thead className="bg-gray-750"><tr>
+                      {['Description', 'Vendor', 'Amount', 'Category', 'Payment', 'Status', 'Date', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-700/50">
+                      {getPaginatedData(expenses, expensePage).map((expense) => (
+                        <tr key={expense.id} className="hover:bg-gray-700/30">
+                          <td className="px-4 py-3 text-sm text-white">{expense.description}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{expense.vendor || '-'}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-red-400">{formatCurrency(expense.amount)}</td>
+                          <td className="px-4 py-3"><span className="px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-300">{expense.category}</span></td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{expense.payment_method}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${expense.payment_status === 'Paid' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-amber-900/50 text-amber-400'}`}>
+                              {expense.payment_status || 'Paid'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{expense.expense_date}</td>
+                          <td className="px-4 py-3 text-sm space-x-2">
+                            {(expense.payment_status === 'Pending') && (
+                              <button onClick={() => { setShowMarkPaidModal(expense.id); setMarkPaidMethod('Cash'); }} data-testid={`mark-paid-${expense.id}`}
+                                className="bg-emerald-600 text-white px-2 py-1 rounded text-xs hover:bg-emerald-700">Mark Paid</button>
+                            )}
+                            <button onClick={() => handleDeleteExpense(expense.id)} data-testid={`delete-expense-${expense.id}`}
+                              className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {renderPagination(expenses, expensePage, setExpensePage)}
+              </div>
+            )}
+          </div>
+
+          {/* Income Records - Room Bookings */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700/50 mb-6">
+            <div className="px-5 py-3 border-b border-gray-700"><h3 className="text-sm font-semibold text-emerald-400">Room Bookings Income</h3></div>
+            {dailySales.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">No room booking income recorded</div>
+            ) : (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-700">
+                    <thead className="bg-gray-750"><tr>
+                      {['Date', 'Guest', 'Room', 'Payment', 'Amount'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-700/50">
+                      {getPaginatedData(dailySales, roomBookingsPage).map((sale, i) => (
+                        <tr key={i} className="hover:bg-gray-700/30">
+                          <td className="px-4 py-3 text-sm text-gray-300">{new Date(sale.date).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-sm text-white">{sale.customer_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-300">{sale.room_number}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{sale.payment_method}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-emerald-400">{formatCurrency(sale.total_amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {renderPagination(dailySales, roomBookingsPage, setRoomBookingsPage)}
+              </div>
+            )}
+          </div>
+
+          {/* Additional Income */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700/50">
+            <div className="px-5 py-3 border-b border-gray-700"><h3 className="text-sm font-semibold text-blue-400">Additional Income</h3></div>
+            {incomes.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">No additional income recorded</div>
+            ) : (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-700">
+                    <thead className="bg-gray-750"><tr>
+                      {['Date', 'Description', 'Category', 'Amount', 'Action'].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{h}</th>)}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-700/50">
+                      {getPaginatedData(incomes, additionalIncomePage).map((income, i) => (
+                        <tr key={i} className="hover:bg-gray-700/30">
+                          <td className="px-4 py-3 text-sm text-gray-300">{new Date(income.income_date).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-sm text-white">{income.description}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400">{income.category}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-emerald-400">{formatCurrency(income.amount)}</td>
+                          <td className="px-4 py-3">
+                            <button onClick={() => handleDeleteIncome(income.id)} className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {renderPagination(incomes, additionalIncomePage, setAdditionalIncomePage)}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* === ADD EXPENSE MODAL === */}
+      {showAddExpenseModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700" data-testid="add-expense-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Add New Expense</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Description *
-                </label>
-                <input
-                  type="text"
-                  value={incomeData.description}
-                  onChange={(e) => setIncomeData({...incomeData, description: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Enter income description"
-                />
+                <label className="block text-sm font-medium text-gray-300 mb-1">Description *</label>
+                <input type="text" value={expenseData.description} onChange={(e) => setExpenseData({...expenseData, description: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" placeholder="Enter expense description" data-testid="expense-description" />
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Amount (LKR) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={incomeData.amount}
-                  onChange={(e) => setIncomeData({...incomeData, amount: parseFloat(e.target.value) || 0})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="0.00"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Amount (LKR) *</label>
+                  <input type="number" step="0.01" value={expenseData.amount} onChange={(e) => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" placeholder="0.00" data-testid="expense-amount" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Date *</label>
+                  <input type="date" value={expenseData.expense_date} onChange={(e) => setExpenseData({...expenseData, expense_date: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="expense-date" />
+                </div>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Category *
-                </label>
-                <select
-                  value={incomeData.category}
-                  onChange={(e) => setIncomeData({...incomeData, category: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
+                <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
+                <select value={expenseData.category} onChange={(e) => setExpenseData({...expenseData, category: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="expense-category">
                   <option value="">Select category</option>
-                  {incomeCategories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
+                  {expenseCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
                 {user?.role === 'Admin' && (
                   <div className="flex mt-2 space-x-2">
-                    <input
-                      type="text"
-                      value={newIncomeCategory}
-                      onChange={(e) => setNewIncomeCategory(e.target.value)}
-                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="New category name"
-                    />
-                    <button
-                      onClick={handleAddIncomeCategory}
-                      disabled={!newIncomeCategory.trim()}
-                      className="px-3 py-1 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 disabled:opacity-50"
-                      data-testid="add-income-category-btn"
-                    >
-                      + Add
-                    </button>
+                    <input type="text" value={newExpenseCategory} onChange={(e) => setNewExpenseCategory(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs" placeholder="New category name" />
+                    <button onClick={handleAddExpenseCategory} disabled={!newExpenseCategory.trim()} data-testid="add-expense-category-btn"
+                      className="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700 disabled:opacity-50">+ Add</button>
                   </div>
                 )}
               </div>
-              
+              {/* Vendor with Autocomplete */}
+              <div ref={vendorRef} className="relative">
+                <label className="block text-sm font-medium text-gray-300 mb-1">Vendor</label>
+                <input type="text" value={expenseData.vendor}
+                  onChange={(e) => { setExpenseData({...expenseData, vendor: e.target.value}); fetchVendors(e.target.value); setShowVendorDropdown(true); }}
+                  onFocus={() => { fetchVendors(expenseData.vendor); setShowVendorDropdown(true); }}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" placeholder="Type vendor name..." data-testid="expense-vendor" />
+                {showVendorDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg max-h-40 overflow-y-auto shadow-xl">
+                    {filteredVendors.length > 0 ? filteredVendors.map((v, i) => (
+                      <button key={i} onClick={() => { setExpenseData({...expenseData, vendor: v}); setShowVendorDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-600">{v}</button>
+                    )) : (
+                      <div className="px-3 py-2 text-xs text-gray-400">No vendors found</div>
+                    )}
+                    <div className="border-t border-gray-600 p-2">
+                      <div className="flex space-x-2">
+                        <input type="text" value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)}
+                          className="flex-1 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs" placeholder="Add new vendor" />
+                        <button onClick={handleAddVendor} disabled={!newVendorName.trim()} data-testid="add-vendor-btn"
+                          className="px-3 py-1 bg-emerald-600 text-white rounded text-xs hover:bg-emerald-700 disabled:opacity-50">+ Add</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Payment Method *</label>
-                <select
-                  value={incomeData.payment_method}
-                  onChange={(e) => setIncomeData({...incomeData, payment_method: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  {paymentMethods.map(method => (
-                    <option key={method} value={method}>{method}</option>
-                  ))}
+                <select value={expenseData.payment_method} onChange={(e) => setExpenseData({...expenseData, payment_method: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="expense-payment-method">
+                  {paymentMethods.map(method => <option key={method} value={method}>{method}</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1">
-                  This will add to {incomeData.payment_method === 'Cash' ? 'Cash Balance' : 'Bank Balance'}
+                <p className="text-xs text-gray-500 mt-1">
+                  {expenseData.payment_method === 'Add to Account' ? 'This will be tracked as a pending payable' :
+                    `This will deduct from ${expenseData.payment_method === 'Cash' ? 'Cash Balance' : 'Bank Balance'}`}
                 </p>
               </div>
-              
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={() => setShowAddExpenseModal(false)} className="px-4 py-2 text-gray-300 border border-gray-600 rounded-lg hover:bg-gray-700 text-sm">Cancel</button>
+              <button onClick={handleAddExpense} data-testid="submit-expense-btn"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium">Add Expense</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === ADD INCOME MODAL === */}
+      {showAddIncomeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700" data-testid="add-income-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Add New Income</h3>
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Date *
-                </label>
-                <input
-                  type="date"
-                  value={incomeData.income_date}
-                  onChange={(e) => setIncomeData({...incomeData, income_date: e.target.value})}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+                <label className="block text-sm font-medium text-gray-300 mb-1">Description *</label>
+                <input type="text" value={incomeData.description} onChange={(e) => setIncomeData({...incomeData, description: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" placeholder="Enter income description" data-testid="income-description" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Amount (LKR) *</label>
+                  <input type="number" step="0.01" value={incomeData.amount} onChange={(e) => setIncomeData({...incomeData, amount: parseFloat(e.target.value) || 0})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" placeholder="0.00" data-testid="income-amount" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Date *</label>
+                  <input type="date" value={incomeData.income_date} onChange={(e) => setIncomeData({...incomeData, income_date: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="income-date" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Category *</label>
+                <select value={incomeData.category} onChange={(e) => setIncomeData({...incomeData, category: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="income-category">
+                  <option value="">Select category</option>
+                  {incomeCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+                {user?.role === 'Admin' && (
+                  <div className="flex mt-2 space-x-2">
+                    <input type="text" value={newIncomeCategory} onChange={(e) => setNewIncomeCategory(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs" placeholder="New category name" />
+                    <button onClick={handleAddIncomeCategory} disabled={!newIncomeCategory.trim()} data-testid="add-income-category-btn"
+                      className="px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700 disabled:opacity-50">+ Add</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Payment Method *</label>
+                <select value={incomeData.payment_method} onChange={(e) => setIncomeData({...incomeData, payment_method: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-emerald-500" data-testid="income-payment-method">
+                  {['Cash', 'Card', 'Bank Transfer'].map(method => <option key={method} value={method}>{method}</option>)}
+                </select>
               </div>
             </div>
-            
             <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowAddIncomeModal(false)}
-                className="px-4 py-2 text-gray-300 border border-gray-600 rounded-md hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddIncome}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-              >
-                Add Income
-              </button>
+              <button onClick={() => setShowAddIncomeModal(false)} className="px-4 py-2 text-gray-300 border border-gray-600 rounded-lg hover:bg-gray-700 text-sm">Cancel</button>
+              <button onClick={handleAddIncome} data-testid="submit-income-btn"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium">Add Income</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === MARK PAID MODAL === */}
+      {showMarkPaidModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-sm border border-gray-700" data-testid="mark-paid-modal">
+            <h3 className="text-lg font-semibold text-white mb-4">Mark Expense as Paid</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-1">Payment Method</label>
+              <select value={markPaidMethod} onChange={(e) => setMarkPaidMethod(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm" data-testid="mark-paid-method">
+                <option value="Cash">Cash</option>
+                <option value="Card">Card</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+              </select>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowMarkPaidModal(null)} className="px-4 py-2 text-gray-300 border border-gray-600 rounded-lg hover:bg-gray-700 text-sm">Cancel</button>
+              <button onClick={() => handleMarkPaid(showMarkPaidModal)} data-testid="confirm-mark-paid"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium">Confirm Payment</button>
             </div>
           </div>
         </div>

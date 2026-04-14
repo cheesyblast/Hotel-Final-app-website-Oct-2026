@@ -274,8 +274,10 @@ class Expense(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     description: str
     amount: float
-    category: str  # Food, Maintenance, Utilities, Staff, Marketing, etc.
-    payment_method: str = "Cash"  # Cash, Card, Bank Transfer
+    category: str
+    payment_method: str = "Cash"  # Cash, Card, Bank Transfer, Add to Account
+    vendor: str = ""
+    payment_status: str = "Paid"  # Paid, Pending
     expense_date: date
     created_by: str = "Admin"
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -284,7 +286,8 @@ class ExpenseCreate(BaseModel):
     description: str
     amount: float
     category: str
-    payment_method: str = "Cash"  # Cash, Card, Bank Transfer
+    payment_method: str = "Cash"  # Cash, Card, Bank Transfer, Add to Account
+    vendor: str = ""
     expense_date: date
 
 class Income(BaseModel):
@@ -5340,12 +5343,28 @@ async def create_expense(expense: ExpenseCreate):
     if isinstance(expense_dict.get('expense_date'), str):
         expense_dict['expense_date'] = datetime.strptime(expense_dict['expense_date'], '%Y-%m-%d').date()
     
+    # Set payment_status based on payment_method
+    if expense_dict.get('payment_method') == 'Add to Account':
+        expense_dict['payment_status'] = 'Pending'
+    else:
+        expense_dict['payment_status'] = 'Paid'
+    
     expense_obj = Expense(**expense_dict)
     
     # Convert date to datetime for MongoDB storage
     expense_storage = expense_obj.dict()
     if expense_storage.get('expense_date'):
         expense_storage['expense_date'] = datetime.combine(expense_storage['expense_date'], datetime.min.time())
+    
+    # Auto-save vendor if new
+    if expense.vendor and expense.vendor.strip():
+        existing_vendor = await db.vendors.find_one({"name": expense.vendor.strip()})
+        if not existing_vendor:
+            await db.vendors.insert_one({
+                "id": str(uuid.uuid4()),
+                "name": expense.vendor.strip(),
+                "created_at": datetime.utcnow()
+            })
     
     await db.expenses.insert_one(expense_storage)
     
@@ -5358,11 +5377,31 @@ async def create_expense(expense: ExpenseCreate):
         details={
             "description": expense.description,
             "amount": expense.amount,
-            "category": expense.category
+            "category": expense.category,
+            "vendor": expense.vendor,
+            "payment_status": expense_obj.payment_status
         }
     )
     
     return expense_obj
+
+@api_router.put("/expenses/{expense_id}/mark-paid")
+async def mark_expense_paid(expense_id: str, data: dict):
+    """Mark a pending expense as paid"""
+    payment_method = data.get("payment_method", "Cash")
+    expense = await db.expenses.find_one({"id": expense_id})
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    
+    await db.expenses.update_one(
+        {"id": expense_id},
+        {"$set": {
+            "payment_status": "Paid",
+            "payment_method": payment_method,
+            "paid_date": datetime.combine(datetime.now().date(), datetime.min.time())
+        }}
+    )
+    return {"message": "Expense marked as paid"}
 
 @api_router.delete("/expenses/{expense_id}")
 async def delete_expense(expense_id: str):
@@ -5370,6 +5409,32 @@ async def delete_expense(expense_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Expense not found")
     return {"message": "Expense deleted successfully"}
+
+# Vendor Management
+@api_router.get("/vendors")
+async def get_vendors(search: Optional[str] = None):
+    """Get all vendors, optionally filtered by search term"""
+    query = {}
+    if search:
+        query["name"] = {"$regex": search, "$options": "i"}
+    vendors = await db.vendors.find(query, {"_id": 0}).sort("name", 1).to_list(100)
+    return [v["name"] for v in vendors]
+
+@api_router.post("/vendors")
+async def add_vendor(data: dict):
+    """Add a new vendor"""
+    name = data.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Vendor name is required")
+    existing = await db.vendors.find_one({"name": name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Vendor already exists")
+    await db.vendors.insert_one({
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "created_at": datetime.utcnow()
+    })
+    return {"message": f"Vendor '{name}' added", "name": name}
 
 # Income Management Routes
 @api_router.get("/incomes", response_model=List[Income])
@@ -5598,7 +5663,7 @@ async def get_financial_summary(start_date: Optional[str] = None, end_date: Opti
 
 @api_router.get("/daily-financial-summary")
 async def get_daily_financial_summary():
-    """Get current day financial summary with running cash and bank balances"""
+    """Get current day financial summary with running cash and bank balances, receivables and payables"""
     today = datetime.now().date()
     start_datetime = datetime.combine(today, datetime.min.time())
     end_datetime = datetime.combine(today, datetime.max.time())
@@ -5618,22 +5683,21 @@ async def get_daily_financial_summary():
     additional_income_total = sum(income.get("amount", 0) for income in additional_incomes)
     total_revenue = today_revenue + additional_income_total
     
-    # Calculate today's expenses
+    # Calculate today's expenses (only paid ones)
     expenses = await db.expenses.find({
-        "expense_date": {"$gte": start_datetime, "$lte": end_datetime}
+        "expense_date": {"$gte": start_datetime, "$lte": end_datetime},
+        "payment_status": {"$ne": "Pending"}
     }).to_list(1000)
     
     total_expenses = sum(expense.get("amount", 0) for expense in expenses)
     
     # Calculate running cash and bank balances (cumulative)
-    # Get all sales and income (cash inflow)
     all_sales = await db.daily_sales.find().to_list(10000)
     all_incomes = await db.incomes.find().to_list(10000)
     
     cash_balance = 0
     bank_balance = 0
     
-    # Add revenue to appropriate balances
     for sale in all_sales:
         amount = sale.get("total_amount", 0)
         payment_method = sale.get("payment_method", "Cash")
@@ -5642,7 +5706,6 @@ async def get_daily_financial_summary():
         elif payment_method in ["Card", "Bank Transfer"]:
             bank_balance += amount
     
-    # Add additional income to cash balance (assuming cash unless specified)
     for income in all_incomes:
         amount = income.get("amount", 0)
         payment_method = income.get("payment_method", "Cash")
@@ -5651,8 +5714,7 @@ async def get_daily_financial_summary():
         elif payment_method in ["Card", "Bank Transfer"]:
             bank_balance += amount
     
-    # Subtract expenses from appropriate balances
-    all_expenses = await db.expenses.find().to_list(10000)
+    all_expenses = await db.expenses.find({"payment_status": {"$ne": "Pending"}}).to_list(10000)
     for expense in all_expenses:
         amount = expense.get("amount", 0)
         payment_method = expense.get("payment_method", "Cash")
@@ -5661,11 +5723,32 @@ async def get_daily_financial_summary():
         elif payment_method in ["Card", "Bank Transfer"]:
             bank_balance -= amount
     
+    # Pending receivables (checked-in guests)
+    checked_in = await db.bookings.find(
+        {"status": "Checked In"}, {"guest_id_proof": 0}
+    ).to_list(1000)
+    total_receivables = sum(
+        max(0, b.get("booking_amount", 0) - b.get("advance_amount", 0))
+        for b in checked_in
+    )
+    
+    # Room bill restaurant orders
+    room_bills = await db.restaurant_orders.find({
+        "payment_status": "Room Bill", "order_status": {"$ne": "Cancelled"}
+    }).to_list(1000)
+    total_receivables += sum(o.get("total_amount", 0) for o in room_bills)
+    
+    # Pending payables
+    pending_expenses = await db.expenses.find({"payment_status": "Pending"}).to_list(1000)
+    total_payables = sum(e.get("amount", 0) for e in pending_expenses)
+    
     return {
         "total_revenue": total_revenue,
         "total_expenses": total_expenses,
         "cash_balance": cash_balance,
         "bank_balance": bank_balance,
+        "pending_receivables": round(total_receivables, 2),
+        "pending_payables": round(total_payables, 2),
         "date": today
     }
 
@@ -5674,122 +5757,232 @@ async def get_daily_financial_report(
     date: Optional[str] = None,
     current_user: UserResponse = Depends(get_current_user)
 ):
-    """Generate detailed daily financial report with Excel download"""
+    """Generate enhanced daily financial report with receivables and payables"""
     try:
-        # Parse the date or use today
         if date:
             target_date = datetime.strptime(date, '%Y-%m-%d').date()
         else:
-            target_date = datetime.utcnow().date()
+            target_date = datetime.now().date()
         
-        # Date range for the day
         start_datetime = datetime.combine(target_date, datetime.min.time())
         end_datetime = datetime.combine(target_date, datetime.max.time())
         
-        # Get all income entries for the day
+        # --- AMOUNTS RECEIVED ---
+        # 1. Room checkout/checkin payments (daily_sales)
+        daily_sales = await db.daily_sales.find({
+            "date": {"$gte": start_datetime, "$lte": end_datetime}
+        }).to_list(1000)
+        
+        # 2. Additional income entries
         incomes = await db.incomes.find({
             "income_date": {"$gte": start_datetime, "$lte": end_datetime}
         }).to_list(1000)
         
-        # Get all expenses for the day
-        expenses = await db.expenses.find({
-            "expense_date": {"$gte": start_datetime, "$lte": end_datetime}
-        }).to_list(1000)
+        # Calculate received by payment method
+        received_cash = 0
+        received_bank = 0
+        received_details = []
         
-        # Get all bookings checked in on this day
-        daily_bookings = await db.bookings.find({
-            "check_in_date": {"$gte": start_datetime, "$lte": end_datetime},
-            "status": {"$in": ["Checked In", "Completed"]}
-        }).to_list(1000)
+        for sale in daily_sales:
+            amt = sale.get("total_amount", 0)
+            pm = sale.get("payment_method", "Cash")
+            if pm == "Cash":
+                received_cash += amt
+            else:
+                received_bank += amt
+            received_details.append({
+                "Type": "Room Booking",
+                "Description": f"Room {sale.get('room_number', '')} - {sale.get('customer_name', '')}",
+                "Category": sale.get("sale_type", "room_booking").replace("_", " ").title(),
+                "Amount": amt,
+                "Payment Method": pm
+            })
         
-        # Calculate balances
-        total_cash_income = sum(income.get("amount", 0) for income in incomes if income.get("payment_method") == "Cash")
-        total_bank_income = sum(income.get("amount", 0) for income in incomes if income.get("payment_method") in ["Card", "Bank Transfer"])
-        
-        total_cash_expenses = sum(expense.get("amount", 0) for expense in expenses if expense.get("payment_method") == "Cash")
-        total_bank_expenses = sum(expense.get("amount", 0) for expense in expenses if expense.get("payment_method") in ["Card", "Bank Transfer"])
-        
-        # Room revenue from bookings
-        room_revenue_cash = sum(booking.get("booking_amount", 0) for booking in daily_bookings if booking.get("payment_method", "Cash") == "Cash")
-        room_revenue_bank = sum(booking.get("booking_amount", 0) for booking in daily_bookings if booking.get("payment_method", "Cash") in ["Card", "Bank Transfer"])
-        
-        # Prepare detailed data for Excel
-        income_details = []
         for income in incomes:
-            income_details.append({
-                "Date": income.get("income_date", "").strftime("%Y-%m-%d %H:%M") if income.get("income_date") else "",
-                "Guest Name": income.get("guest_name", "N/A"),
-                "Category": income.get("category", "General"),
+            amt = income.get("amount", 0)
+            pm = income.get("payment_method", "Cash")
+            if pm == "Cash":
+                received_cash += amt
+            else:
+                received_bank += amt
+            received_details.append({
+                "Type": "Income",
                 "Description": income.get("description", ""),
-                "Amount (LKR)": income.get("amount", 0),
-                "Payment Method": income.get("payment_method", "Cash"),
-                "Channel": "Direct",  # Income entries are typically direct
-                "Added By": income.get("added_by", "N/A")
+                "Category": income.get("category", "General"),
+                "Amount": amt,
+                "Payment Method": pm
             })
         
-        # Add booking revenue to income details
-        for booking in daily_bookings:
-            income_details.append({
-                "Date": booking.get("check_in_date", "").strftime("%Y-%m-%d %H:%M") if booking.get("check_in_date") else "",
-                "Guest Name": booking.get("guest_name", "N/A"),
-                "Category": "Room Revenue",
-                "Description": f"Room {booking.get('room_number', 'N/A')} - {booking.get('stay_type', 'N/A')}",
-                "Amount (LKR)": booking.get("booking_amount", 0),
-                "Payment Method": booking.get("payment_method", "Cash"),
-                "Channel": booking.get("booking_channel_name", "Direct"),
-                "Added By": "System (Check-in)"
-            })
+        total_received = received_cash + received_bank
         
-        expense_details = []
+        # --- AMOUNTS PAID ---
+        expenses = await db.expenses.find({
+            "expense_date": {"$gte": start_datetime, "$lte": end_datetime},
+            "payment_status": {"$ne": "Pending"}
+        }).to_list(1000)
+        
+        paid_cash = 0
+        paid_bank = 0
+        paid_details = []
+        
         for expense in expenses:
-            expense_details.append({
-                "Date": expense.get("expense_date", "").strftime("%Y-%m-%d %H:%M") if expense.get("expense_date") else "",
-                "Category": expense.get("category", "General"),
+            amt = expense.get("amount", 0)
+            pm = expense.get("payment_method", "Cash")
+            if pm == "Cash":
+                paid_cash += amt
+            elif pm in ["Card", "Bank Transfer"]:
+                paid_bank += amt
+            paid_details.append({
                 "Description": expense.get("description", ""),
-                "Amount (LKR)": expense.get("amount", 0),
-                "Payment Method": expense.get("payment_method", "Cash"),
-                "Added By": expense.get("added_by", "N/A")
+                "Category": expense.get("category", "General"),
+                "Vendor": expense.get("vendor", ""),
+                "Amount": amt,
+                "Payment Method": pm
             })
         
-        # Calculate running balances
-        cash_balance = (total_cash_income + room_revenue_cash) - total_cash_expenses
-        bank_balance = (total_bank_income + room_revenue_bank) - total_bank_expenses
+        total_paid = paid_cash + paid_bank
         
-        # Summary data
-        summary_data = [{
-            "Report Type": "Daily Financial Report",
-            "Date": target_date.strftime("%Y-%m-%d"),
-            "": "",
-            "INCOME SUMMARY": "",
-            "Cash Income (LKR)": total_cash_income + room_revenue_cash,
-            "Bank Income (LKR)": total_bank_income + room_revenue_bank,
-            "Total Income (LKR)": total_cash_income + total_bank_income + room_revenue_cash + room_revenue_bank,
-            " ": "",
-            "EXPENSE SUMMARY": "",
-            "Cash Expenses (LKR)": total_cash_expenses,
-            "Bank Expenses (LKR)": total_bank_expenses,
-            "Total Expenses (LKR)": total_cash_expenses + total_bank_expenses,
-            "  ": "",
-            "BALANCE SUMMARY": "",
-            "Net Cash Balance (LKR)": cash_balance,
-            "Net Bank Balance (LKR)": bank_balance,
-            "Total Net Balance (LKR)": cash_balance + bank_balance
-        }]
+        # --- PENDING RECEIVABLES ---
+        checked_in_guests = await db.bookings.find({
+            "status": "Checked In"
+        }, {"guest_id_proof": 0}).to_list(1000)
+        
+        receivable_details = []
+        total_receivables = 0
+        for guest in checked_in_guests:
+            booking_amt = guest.get("booking_amount", 0)
+            advance = guest.get("advance_amount", 0)
+            pending = booking_amt - advance
+            if pending > 0:
+                receivable_details.append({
+                    "Guest": guest.get("guest_name", "N/A"),
+                    "Room": guest.get("room_number", ""),
+                    "Booking Amount": booking_amt,
+                    "Advance Paid": advance,
+                    "Pending Amount": pending,
+                    "Check In": guest.get("check_in_date", "").strftime("%Y-%m-%d") if isinstance(guest.get("check_in_date"), datetime) else str(guest.get("check_in_date", ""))
+                })
+                total_receivables += pending
+        
+        # Restaurant room bills (unpaid)
+        room_bill_orders = await db.restaurant_orders.find({
+            "payment_status": "Room Bill",
+            "order_status": {"$ne": "Cancelled"}
+        }).to_list(1000)
+        
+        for order in room_bill_orders:
+            amt = order.get("total_amount", 0)
+            receivable_details.append({
+                "Guest": f"Room {order.get('room_number', 'N/A')}",
+                "Room": order.get("room_number", ""),
+                "Booking Amount": 0,
+                "Advance Paid": 0,
+                "Pending Amount": amt,
+                "Check In": "Restaurant Room Bill"
+            })
+            total_receivables += amt
+        
+        # --- PENDING PAYABLES ---
+        pending_expenses = await db.expenses.find({
+            "payment_status": "Pending"
+        }).to_list(1000)
+        
+        payable_details = []
+        total_payables = 0
+        for exp in pending_expenses:
+            amt = exp.get("amount", 0)
+            payable_details.append({
+                "Type": "Unpaid Bill",
+                "Description": exp.get("description", ""),
+                "Vendor": exp.get("vendor", "N/A"),
+                "Category": exp.get("category", ""),
+                "Amount": amt,
+                "Date": exp.get("expense_date", "").strftime("%Y-%m-%d") if isinstance(exp.get("expense_date"), datetime) else str(exp.get("expense_date", ""))
+            })
+            total_payables += amt
+        
+        # Channel commissions due
+        all_channels = await db.booking_channels.find({}, {"_id": 0}).to_list(100)
+        channel_map = {ch.get("name", ""): ch for ch in all_channels}
+        
+        completed_bookings = await db.bookings.find({
+            "status": {"$in": ["Checked In", "Completed"]},
+            "booking_channel_name": {"$ne": "Direct"}
+        }, {"guest_id_proof": 0}).to_list(10000)
+        
+        commission_by_channel = {}
+        for bk in completed_bookings:
+            ch_name = bk.get("booking_channel_name", "")
+            ch_info = channel_map.get(ch_name, {})
+            if ch_info.get("auto_rate") and ch_info.get("commission_rate", 0) > 0:
+                commission = bk.get("booking_amount", 0) * ch_info["commission_rate"] / 100
+                if ch_name not in commission_by_channel:
+                    commission_by_channel[ch_name] = 0
+                commission_by_channel[ch_name] += commission
+        
+        for ch_name, commission in commission_by_channel.items():
+            if commission > 0:
+                payable_details.append({
+                    "Type": "Channel Commission",
+                    "Description": f"Commission for {ch_name}",
+                    "Vendor": ch_name,
+                    "Category": "Commission",
+                    "Amount": round(commission, 2),
+                    "Date": ""
+                })
+                total_payables += commission
+        
+        total_payables = round(total_payables, 2)
+        
+        net_position = total_received - total_paid
         
         return {
             "date": target_date.strftime("%Y-%m-%d"),
-            "summary": summary_data[0],
-            "income_details": income_details,
-            "expense_details": expense_details,
-            "cash_balance": cash_balance,
-            "bank_balance": bank_balance,
-            "total_balance": cash_balance + bank_balance,
-            "total_income": total_cash_income + total_bank_income + room_revenue_cash + room_revenue_bank,
-            "total_expenses": total_cash_expenses + total_bank_expenses
+            "received": {
+                "cash": received_cash,
+                "bank": received_bank,
+                "total": total_received,
+                "details": received_details
+            },
+            "paid": {
+                "cash": paid_cash,
+                "bank": paid_bank,
+                "total": total_paid,
+                "details": paid_details
+            },
+            "pending_receivables": {
+                "total": total_receivables,
+                "details": receivable_details
+            },
+            "pending_payables": {
+                "total": total_payables,
+                "details": payable_details
+            },
+            "net_position": net_position,
+            "summary": {
+                "Cash Income (LKR)": received_cash,
+                "Bank Income (LKR)": received_bank,
+                "Total Income (LKR)": total_received,
+                "Cash Expenses (LKR)": paid_cash,
+                "Bank Expenses (LKR)": paid_bank,
+                "Total Expenses (LKR)": total_paid,
+                "Pending Receivables (LKR)": total_receivables,
+                "Pending Payables (LKR)": total_payables,
+                "Net Position (LKR)": net_position
+            },
+            "income_details": received_details,
+            "expense_details": paid_details,
+            "cash_balance": received_cash - paid_cash,
+            "bank_balance": received_bank - paid_bank,
+            "total_balance": net_position,
+            "total_income": total_received,
+            "total_expenses": total_paid
         }
         
     except Exception as e:
         print(f"Daily report error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate daily report: {str(e)}")
 
 @api_router.get("/financial-reports/monthly")
@@ -5798,128 +5991,170 @@ async def get_monthly_financial_report(
     month: int = None,
     current_user: UserResponse = Depends(get_current_user)
 ):
-    """Generate detailed monthly financial report with Excel download"""
+    """Generate enhanced monthly financial report with day-by-day breakdown"""
     try:
-        # Use current month if not specified
         if year is None or month is None:
-            today = datetime.utcnow().date()
+            today = datetime.now().date()
             year = today.year
             month = today.month
         
-        # First and last day of the month
+        import calendar
+        days_in_month = calendar.monthrange(year, month)[1]
         start_date = datetime(year, month, 1)
-        if month == 12:
-            end_date = datetime(year + 1, 1, 1) - timedelta(seconds=1)
-        else:
-            end_date = datetime(year, month + 1, 1) - timedelta(seconds=1)
+        end_date = datetime(year, month, days_in_month, 23, 59, 59)
         
-        # Get all income entries for the month
-        incomes = await db.incomes.find({
-            "income_date": {"$gte": start_date, "$lte": end_date}
-        }).to_list(10000)
-        
-        # Get all expenses for the month
-        expenses = await db.expenses.find({
-            "expense_date": {"$gte": start_date, "$lte": end_date}
-        }).to_list(10000)
-        
-        # Get all bookings checked in during the month
-        monthly_bookings = await db.bookings.find({
-            "check_in_date": {"$gte": start_date, "$lte": end_date},
-            "status": {"$in": ["Checked In", "Completed"]}
-        }).to_list(10000)
-        
-        # Calculate balances
-        total_cash_income = sum(income.get("amount", 0) for income in incomes if income.get("payment_method") == "Cash")
-        total_bank_income = sum(income.get("amount", 0) for income in incomes if income.get("payment_method") in ["Card", "Bank Transfer"])
-        
-        total_cash_expenses = sum(expense.get("amount", 0) for expense in expenses if expense.get("payment_method") == "Cash")
-        total_bank_expenses = sum(expense.get("amount", 0) for expense in expenses if expense.get("payment_method") in ["Card", "Bank Transfer"])
-        
-        # Room revenue from bookings
-        room_revenue_cash = sum(booking.get("booking_amount", 0) for booking in monthly_bookings if booking.get("payment_method", "Cash") == "Cash")
-        room_revenue_bank = sum(booking.get("booking_amount", 0) for booking in monthly_bookings if booking.get("payment_method", "Cash") in ["Card", "Bank Transfer"])
-        
-        # Prepare detailed data for Excel
-        income_details = []
-        for income in incomes:
-            income_details.append({
-                "Date": income.get("income_date", "").strftime("%Y-%m-%d %H:%M") if income.get("income_date") else "",
-                "Guest Name": income.get("guest_name", "N/A"),
-                "Category": income.get("category", "General"),
-                "Description": income.get("description", ""),
-                "Amount (LKR)": income.get("amount", 0),
-                "Payment Method": income.get("payment_method", "Cash"),
-                "Channel": "Direct",  # Income entries are typically direct
-                "Added By": income.get("added_by", "N/A")
-            })
-        
-        # Add booking revenue to income details
-        for booking in monthly_bookings:
-            income_details.append({
-                "Date": booking.get("check_in_date", "").strftime("%Y-%m-%d %H:%M") if booking.get("check_in_date") else "",
-                "Guest Name": booking.get("guest_name", "N/A"),
-                "Category": "Room Revenue",
-                "Description": f"Room {booking.get('room_number', 'N/A')} - {booking.get('stay_type', 'N/A')}",
-                "Amount (LKR)": booking.get("booking_amount", 0),
-                "Payment Method": booking.get("payment_method", "Cash"),
-                "Channel": booking.get("booking_channel_name", "Direct"),
-                "Added By": "System (Check-in)"
-            })
-        
-        expense_details = []
-        for expense in expenses:
-            expense_details.append({
-                "Date": expense.get("expense_date", "").strftime("%Y-%m-%d %H:%M") if expense.get("expense_date") else "",
-                "Category": expense.get("category", "General"),
-                "Description": expense.get("description", ""),
-                "Amount (LKR)": expense.get("amount", 0),
-                "Payment Method": expense.get("payment_method", "Cash"),
-                "Added By": expense.get("added_by", "N/A")
-            })
-        
-        # Calculate running balances
-        cash_balance = (total_cash_income + room_revenue_cash) - total_cash_expenses
-        bank_balance = (total_bank_income + room_revenue_bank) - total_bank_expenses
-        
-        # Summary data
         month_names = ["", "January", "February", "March", "April", "May", "June", 
                       "July", "August", "September", "October", "November", "December"]
         
-        summary_data = [{
-            "Report Type": "Monthly Financial Report",
-            "Month": f"{month_names[month]} {year}",
-            "": "",
-            "INCOME SUMMARY": "",
-            "Cash Income (LKR)": total_cash_income + room_revenue_cash,
-            "Bank Income (LKR)": total_bank_income + room_revenue_bank,
-            "Total Income (LKR)": total_cash_income + total_bank_income + room_revenue_cash + room_revenue_bank,
-            " ": "",
-            "EXPENSE SUMMARY": "",
-            "Cash Expenses (LKR)": total_cash_expenses,
-            "Bank Expenses (LKR)": total_bank_expenses,
-            "Total Expenses (LKR)": total_cash_expenses + total_bank_expenses,
-            "  ": "",
-            "BALANCE SUMMARY": "",
-            "Net Cash Balance (LKR)": cash_balance,
-            "Net Bank Balance (LKR)": bank_balance,
-            "Total Net Balance (LKR)": cash_balance + bank_balance
-        }]
+        # Fetch all data for the month at once
+        all_daily_sales = await db.daily_sales.find({
+            "date": {"$gte": start_date, "$lte": end_date}
+        }).to_list(10000)
+        
+        all_incomes = await db.incomes.find({
+            "income_date": {"$gte": start_date, "$lte": end_date}
+        }).to_list(10000)
+        
+        all_expenses = await db.expenses.find({
+            "expense_date": {"$gte": start_date, "$lte": end_date}
+        }).to_list(10000)
+        
+        # Build day-by-day breakdown
+        daily_breakdown = []
+        grand_received_cash = 0
+        grand_received_bank = 0
+        grand_paid_cash = 0
+        grand_paid_bank = 0
+        grand_pending_payables = 0
+        
+        for day in range(1, days_in_month + 1):
+            day_start = datetime(year, month, day, 0, 0, 0)
+            day_end = datetime(year, month, day, 23, 59, 59)
+            
+            # Filter sales for this day
+            day_sales = [s for s in all_daily_sales 
+                        if day_start <= s.get("date", datetime.min) <= day_end]
+            day_incomes = [i for i in all_incomes 
+                          if day_start <= i.get("income_date", datetime.min) <= day_end]
+            day_expenses = [e for e in all_expenses 
+                           if day_start <= e.get("expense_date", datetime.min) <= day_end]
+            
+            # Received
+            rc = sum(s.get("total_amount", 0) for s in day_sales if s.get("payment_method", "Cash") == "Cash")
+            rc += sum(i.get("amount", 0) for i in day_incomes if i.get("payment_method", "Cash") == "Cash")
+            
+            rb = sum(s.get("total_amount", 0) for s in day_sales if s.get("payment_method", "Cash") in ["Card", "Bank Transfer"])
+            rb += sum(i.get("amount", 0) for i in day_incomes if i.get("payment_method", "Cash") in ["Card", "Bank Transfer"])
+            
+            # Paid (only actually paid expenses)
+            pc = sum(e.get("amount", 0) for e in day_expenses 
+                    if e.get("payment_method", "Cash") == "Cash" and e.get("payment_status", "Paid") != "Pending")
+            pb = sum(e.get("amount", 0) for e in day_expenses 
+                    if e.get("payment_method", "Cash") in ["Card", "Bank Transfer"] and e.get("payment_status", "Paid") != "Pending")
+            
+            # Pending payables for the day
+            pp = sum(e.get("amount", 0) for e in day_expenses if e.get("payment_status") == "Pending")
+            
+            total_received = rc + rb
+            total_paid = pc + pb
+            net = total_received - total_paid
+            
+            grand_received_cash += rc
+            grand_received_bank += rb
+            grand_paid_cash += pc
+            grand_paid_bank += pb
+            grand_pending_payables += pp
+            
+            daily_breakdown.append({
+                "date": f"{year}-{month:02d}-{day:02d}",
+                "day": day,
+                "received_cash": round(rc, 2),
+                "received_bank": round(rb, 2),
+                "total_received": round(total_received, 2),
+                "paid_cash": round(pc, 2),
+                "paid_bank": round(pb, 2),
+                "total_paid": round(total_paid, 2),
+                "pending_payables": round(pp, 2),
+                "net_balance": round(net, 2),
+                "transactions": len(day_sales) + len(day_incomes) + len(day_expenses)
+            })
+        
+        grand_total_received = grand_received_cash + grand_received_bank
+        grand_total_paid = grand_paid_cash + grand_paid_bank
+        grand_net = grand_total_received - grand_total_paid
+        
+        # Income details for the whole month
+        income_details = []
+        for sale in all_daily_sales:
+            income_details.append({
+                "Date": sale.get("date", "").strftime("%Y-%m-%d") if isinstance(sale.get("date"), datetime) else "",
+                "Guest Name": sale.get("customer_name", "N/A"),
+                "Category": sale.get("sale_type", "Room Booking").replace("_", " ").title(),
+                "Description": f"Room {sale.get('room_number', '')}",
+                "Amount": sale.get("total_amount", 0),
+                "Payment Method": sale.get("payment_method", "Cash")
+            })
+        for income in all_incomes:
+            income_details.append({
+                "Date": income.get("income_date", "").strftime("%Y-%m-%d") if isinstance(income.get("income_date"), datetime) else "",
+                "Guest Name": income.get("guest_name", "N/A"),
+                "Category": income.get("category", "General"),
+                "Description": income.get("description", ""),
+                "Amount": income.get("amount", 0),
+                "Payment Method": income.get("payment_method", "Cash")
+            })
+        
+        expense_details = []
+        for expense in all_expenses:
+            expense_details.append({
+                "Date": expense.get("expense_date", "").strftime("%Y-%m-%d") if isinstance(expense.get("expense_date"), datetime) else "",
+                "Category": expense.get("category", "General"),
+                "Description": expense.get("description", ""),
+                "Vendor": expense.get("vendor", ""),
+                "Amount": expense.get("amount", 0),
+                "Payment Method": expense.get("payment_method", "Cash"),
+                "Status": expense.get("payment_status", "Paid")
+            })
         
         return {
             "month": f"{month_names[month]} {year}",
-            "summary": summary_data[0],
+            "year": year,
+            "month_number": month,
+            "days_in_month": days_in_month,
+            "daily_breakdown": daily_breakdown,
+            "grand_totals": {
+                "received_cash": round(grand_received_cash, 2),
+                "received_bank": round(grand_received_bank, 2),
+                "total_received": round(grand_total_received, 2),
+                "paid_cash": round(grand_paid_cash, 2),
+                "paid_bank": round(grand_paid_bank, 2),
+                "total_paid": round(grand_total_paid, 2),
+                "pending_payables": round(grand_pending_payables, 2),
+                "net_balance": round(grand_net, 2)
+            },
             "income_details": income_details,
             "expense_details": expense_details,
-            "cash_balance": cash_balance,
-            "bank_balance": bank_balance,
-            "total_balance": cash_balance + bank_balance,
-            "total_income": total_cash_income + total_bank_income + room_revenue_cash + room_revenue_bank,
-            "total_expenses": total_cash_expenses + total_bank_expenses
+            "summary": {
+                "Cash Income (LKR)": round(grand_received_cash, 2),
+                "Bank Income (LKR)": round(grand_received_bank, 2),
+                "Total Income (LKR)": round(grand_total_received, 2),
+                "Cash Expenses (LKR)": round(grand_paid_cash, 2),
+                "Bank Expenses (LKR)": round(grand_paid_bank, 2),
+                "Total Expenses (LKR)": round(grand_total_paid, 2),
+                "Pending Payables (LKR)": round(grand_pending_payables, 2),
+                "Net Balance (LKR)": round(grand_net, 2)
+            },
+            "cash_balance": round(grand_received_cash - grand_paid_cash, 2),
+            "bank_balance": round(grand_received_bank - grand_paid_bank, 2),
+            "total_balance": round(grand_net, 2),
+            "total_income": round(grand_total_received, 2),
+            "total_expenses": round(grand_total_paid, 2)
         }
         
     except Exception as e:
         print(f"Monthly report error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate monthly report: {str(e)}")
 
 # Restaurant Management Routes
