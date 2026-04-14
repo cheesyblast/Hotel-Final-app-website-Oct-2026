@@ -925,6 +925,17 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// Page-level permission guard
+const PageGuard = ({ pageId, children }) => {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (user.role === 'Admin') return children;
+  const perms = user.page_permissions || [];
+  if (perms.length === 0) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-center"><h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2><p className="text-gray-400">You don't have permission to view this page.</p></div></div>;
+  if (!perms.includes(pageId)) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-center"><h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2><p className="text-gray-400">You don't have permission to view this page.</p></div></div>;
+  return children;
+};
+
 // Real-time clock component
 const RealTimeClock = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -5857,46 +5868,110 @@ const Expenses = () => {
   const downloadDailyExcel = () => {
     if (!dailyReportData) return;
     const wb = XLSX.utils.book_new();
-    const summaryRows = [
-      { Item: 'DAILY SALES REPORT', Value: '' },
-      { Item: `Date: ${dailyReportData.date}`, Value: '' },
-      { Item: '', Value: '' },
-      { Item: 'AMOUNTS RECEIVED', Value: '' },
-      { Item: 'Cash Received', Value: dailyReportData.received?.cash || 0 },
-      { Item: 'Bank Received', Value: dailyReportData.received?.bank || 0 },
-      { Item: 'Total Received', Value: dailyReportData.received?.total || 0 },
-      { Item: '', Value: '' },
-      { Item: 'AMOUNTS PAID', Value: '' },
-      { Item: 'Cash Paid', Value: dailyReportData.paid?.cash || 0 },
-      { Item: 'Bank Paid', Value: dailyReportData.paid?.bank || 0 },
-      { Item: 'Total Paid', Value: dailyReportData.paid?.total || 0 },
-      { Item: '', Value: '' },
-      { Item: 'PENDING', Value: '' },
-      { Item: 'Pending Receivables', Value: dailyReportData.pending_receivables?.total || 0 },
-      { Item: 'Pending Payables', Value: dailyReportData.pending_payables?.total || 0 },
-      { Item: '', Value: '' },
-      { Item: 'NET POSITION', Value: dailyReportData.net_position || 0 },
-    ];
-    const ws = XLSX.utils.json_to_sheet(summaryRows);
-    ws['!cols'] = [{ width: 25 }, { width: 18 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Summary');
 
-    if (dailyReportData.received?.details?.length > 0) {
-      const incWs = XLSX.utils.json_to_sheet(dailyReportData.received.details);
-      XLSX.utils.book_append_sheet(wb, incWs, 'Received');
+    // Build detailed summary with individual records under each section
+    const rows = [];
+    rows.push(['DAILY SALES REPORT', '']);
+    rows.push([`Date: ${dailyReportData.date}`, '']);
+    rows.push(['', '']);
+    
+    // --- CASH RECEIVED Section ---
+    const cashReceived = (dailyReportData.received?.details || []).filter(d => d['Payment Method'] === 'Cash');
+    const bankReceived = (dailyReportData.received?.details || []).filter(d => d['Payment Method'] !== 'Cash');
+    
+    rows.push(['CASH RECEIVED', '']);
+    rows.push(['Source', 'Description', 'Category', 'Amount (LKR)']);
+    if (cashReceived.length > 0) {
+      cashReceived.forEach(d => {
+        rows.push([d.Type || '', d.Description || '', d.Category || '', d.Amount || 0]);
+      });
+      rows.push(['', '', 'Total Cash Received', dailyReportData.received?.cash || 0]);
+    } else {
+      rows.push(['No cash transactions', '', '', 0]);
     }
-    if (dailyReportData.paid?.details?.length > 0) {
-      const expWs = XLSX.utils.json_to_sheet(dailyReportData.paid.details);
-      XLSX.utils.book_append_sheet(wb, expWs, 'Paid');
+    rows.push(['', '']);
+    
+    // --- BANK RECEIVED Section ---
+    rows.push(['BANK RECEIVED', '']);
+    rows.push(['Source', 'Description', 'Category', 'Amount (LKR)']);
+    if (bankReceived.length > 0) {
+      bankReceived.forEach(d => {
+        rows.push([d.Type || '', d.Description || '', d.Category || '', d.Amount || 0]);
+      });
+      rows.push(['', '', 'Total Bank Received', dailyReportData.received?.bank || 0]);
+    } else {
+      rows.push(['No bank transactions', '', '', 0]);
     }
-    if (dailyReportData.pending_receivables?.details?.length > 0) {
-      const recWs = XLSX.utils.json_to_sheet(dailyReportData.pending_receivables.details);
-      XLSX.utils.book_append_sheet(wb, recWs, 'Receivables');
+    rows.push(['', '']);
+    rows.push(['', '', 'TOTAL RECEIVED', dailyReportData.received?.total || 0]);
+    rows.push(['', '']);
+    
+    // --- CASH PAID Section ---
+    const cashPaid = (dailyReportData.paid?.details || []).filter(d => d['Payment Method'] === 'Cash');
+    const bankPaid = (dailyReportData.paid?.details || []).filter(d => d['Payment Method'] !== 'Cash');
+    
+    rows.push(['CASH PAID', '']);
+    rows.push(['Vendor', 'Description', 'Category', 'Amount (LKR)']);
+    if (cashPaid.length > 0) {
+      cashPaid.forEach(d => {
+        rows.push([d.Vendor || '-', d.Description || '', d.Category || '', d.Amount || 0]);
+      });
+      rows.push(['', '', 'Total Cash Paid', dailyReportData.paid?.cash || 0]);
+    } else {
+      rows.push(['No cash payments', '', '', 0]);
     }
-    if (dailyReportData.pending_payables?.details?.length > 0) {
-      const payWs = XLSX.utils.json_to_sheet(dailyReportData.pending_payables.details);
-      XLSX.utils.book_append_sheet(wb, payWs, 'Payables');
+    rows.push(['', '']);
+    
+    // --- BANK PAID Section ---
+    rows.push(['BANK PAID', '']);
+    rows.push(['Vendor', 'Description', 'Category', 'Amount (LKR)']);
+    if (bankPaid.length > 0) {
+      bankPaid.forEach(d => {
+        rows.push([d.Vendor || '-', d.Description || '', d.Category || '', d.Amount || 0]);
+      });
+      rows.push(['', '', 'Total Bank Paid', dailyReportData.paid?.bank || 0]);
+    } else {
+      rows.push(['No bank payments', '', '', 0]);
     }
+    rows.push(['', '']);
+    rows.push(['', '', 'TOTAL PAID', dailyReportData.paid?.total || 0]);
+    rows.push(['', '']);
+    
+    // --- NET POSITION ---
+    rows.push(['NET POSITION', '', '', dailyReportData.net_position || 0]);
+    rows.push(['', '']);
+    
+    // --- PENDING RECEIVABLES ---
+    const recvDetails = dailyReportData.pending_receivables?.details || [];
+    rows.push(['PENDING RECEIVABLES', '']);
+    if (recvDetails.length > 0) {
+      rows.push(['Guest', 'Room', 'Booking Amount', 'Advance Paid', 'Pending Amount']);
+      recvDetails.forEach(d => {
+        rows.push([d.Guest || '', d.Room || '', d['Booking Amount'] || 0, d['Advance Paid'] || 0, d['Pending Amount'] || 0]);
+      });
+      rows.push(['', '', '', 'Total Receivables', dailyReportData.pending_receivables?.total || 0]);
+    } else {
+      rows.push(['No pending receivables', '', '', '', 0]);
+    }
+    rows.push(['', '']);
+    
+    // --- PENDING PAYABLES ---
+    const payDetails = dailyReportData.pending_payables?.details || [];
+    rows.push(['PENDING PAYABLES', '']);
+    if (payDetails.length > 0) {
+      rows.push(['Type', 'Description', 'Vendor', 'Category', 'Amount']);
+      payDetails.forEach(d => {
+        rows.push([d.Type || '', d.Description || '', d.Vendor || '', d.Category || '', d.Amount || 0]);
+      });
+      rows.push(['', '', '', 'Total Payables', dailyReportData.pending_payables?.total || 0]);
+    } else {
+      rows.push(['No pending payables', '', '', '', 0]);
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ width: 22 }, { width: 30 }, { width: 20 }, { width: 18 }, { width: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Daily Sales Report');
+
     XLSX.writeFile(wb, `Daily_Sales_Report_${dailyReportData.date}.xlsx`);
   };
 
@@ -6163,12 +6238,7 @@ const Expenses = () => {
               <button onClick={downloadDailyExcel} data-testid="download-daily-excel"
                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 flex items-center space-x-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span>Excel</span>
-              </button>
-              <button onClick={downloadDailyPDF} data-testid="download-daily-pdf"
-                className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 flex items-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                <span>PDF</span>
+                <span>Download Excel</span>
               </button>
             </div>
           </div>
@@ -6335,12 +6405,7 @@ const Expenses = () => {
               <button onClick={downloadMonthlyExcel} data-testid="download-monthly-excel"
                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 flex items-center space-x-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span>Excel</span>
-              </button>
-              <button onClick={downloadMonthlyPDF} data-testid="download-monthly-pdf"
-                className="bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 flex items-center space-x-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                <span>PDF</span>
+                <span>Download Excel</span>
               </button>
             </div>
           </div>
@@ -8684,6 +8749,7 @@ const Rooms = () => {
 // Navigation Component
 const Navigation = () => {
   const location = useLocation();
+  const { user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [financialDropdownOpen, setFinancialDropdownOpen] = useState(false);
   const [expensesDropdownOpen, setExpensesDropdownOpen] = useState(false);
@@ -8692,8 +8758,17 @@ const Navigation = () => {
     return location.pathname === path;
   };
 
+  // Check if user has access to a page based on permissions
+  const hasPageAccess = (pageId) => {
+    if (!user) return false;
+    if (user.role === 'Admin') return true;
+    const perms = user.page_permissions || [];
+    if (perms.length === 0) return false;
+    return perms.includes(pageId);
+  };
+
   const isFinancialActive = () => {
-    return ['/income-expense', '/commissions', '/reports'].includes(location.pathname);
+    return ['/income-expense', '/commissions'].includes(location.pathname);
   };
 
   const isExpensesActive = () => {
@@ -8701,27 +8776,26 @@ const Navigation = () => {
   };
 
   const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/calendar', label: 'Calendar' },
-    { path: '/restaurant', label: 'Restaurant' },
-    { path: '/rooms', label: 'Rooms' },
-    { path: '/guests', label: 'Guests' },
-    { path: '/bookings', label: 'Bookings' },
-    { path: '/payroll', label: 'Payroll' },
-    { path: '/settings', label: 'Settings' }
+    { path: '/', label: 'Dashboard', pageId: 'dashboard' },
+    { path: '/calendar', label: 'Calendar', pageId: 'calendar' },
+    { path: '/restaurant', label: 'Restaurant', pageId: 'restaurant' },
+    { path: '/rooms', label: 'Rooms', pageId: 'rooms' },
+    { path: '/guests', label: 'Guests', pageId: 'guests' },
+    { path: '/bookings', label: 'Bookings', pageId: 'bookings' },
+    { path: '/payroll', label: 'Payroll', pageId: 'payroll' },
+    { path: '/settings', label: 'Settings', pageId: 'settings' }
   ];
 
   const financialItems = [
-    { path: '/income-expense', label: 'Income & Expense' },
-    { path: '/commissions', label: 'Commissions' },
-    { path: '/reports', label: 'Reports' }
+    { path: '/income-expense', label: 'Income & Expense', pageId: 'income_expense' },
+    { path: '/commissions', label: 'Commissions', pageId: 'commissions' },
   ];
 
   const expenseItems = [
-    { path: '/expenses', label: 'All Expenses' },
-    { path: '/restaurant-expenses', label: 'Restaurant Expenses' },
-    { path: '/maintenance', label: 'Maintenance' },
-    { path: '/stocks', label: 'Stock Management' }
+    { path: '/expenses', label: 'All Expenses', pageId: 'expenses' },
+    { path: '/restaurant-expenses', label: 'Restaurant Expenses', pageId: 'expenses' },
+    { path: '/maintenance', label: 'Maintenance', pageId: 'expenses' },
+    { path: '/stocks', label: 'Stock Management', pageId: 'stocks' }
   ];
 
   return (
@@ -8729,7 +8803,7 @@ const Navigation = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Desktop Navigation */}
         <div className="hidden md:flex space-x-4 items-center">
-          {navItems.slice(0, 6).map((item) => (
+          {navItems.slice(0, 6).filter(item => hasPageAccess(item.pageId)).map((item) => (
             <Link 
               key={item.path}
               to={item.path} 
@@ -8744,6 +8818,7 @@ const Navigation = () => {
           ))}
           
           {/* Financial Dropdown */}
+          {financialItems.some(item => hasPageAccess(item.pageId)) && (
           <div className="relative">
             <button
               onClick={() => { setFinancialDropdownOpen(!financialDropdownOpen); setExpensesDropdownOpen(false); }}
@@ -8764,7 +8839,7 @@ const Navigation = () => {
             </button>
             {financialDropdownOpen && (
               <div className="absolute left-0 mt-1 w-44 bg-gray-700 rounded-md shadow-lg border border-gray-600 z-50">
-                {financialItems.map((item) => (
+                {financialItems.filter(item => hasPageAccess(item.pageId)).map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
@@ -8781,8 +8856,10 @@ const Navigation = () => {
               </div>
             )}
           </div>
+          )}
 
           {/* Expenses Dropdown */}
+          {expenseItems.some(item => hasPageAccess(item.pageId)) && (
           <div className="relative">
             <button
               onClick={() => { setExpensesDropdownOpen(!expensesDropdownOpen); setFinancialDropdownOpen(false); }}
@@ -8803,7 +8880,7 @@ const Navigation = () => {
             </button>
             {expensesDropdownOpen && (
               <div className="absolute left-0 mt-1 w-48 bg-gray-700 rounded-md shadow-lg border border-gray-600 z-50">
-                {expenseItems.map((item) => (
+                {expenseItems.filter(item => hasPageAccess(item.pageId)).map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
@@ -8820,8 +8897,9 @@ const Navigation = () => {
               </div>
             )}
           </div>
+          )}
 
-          {navItems.slice(6).map((item) => (
+          {navItems.slice(6).filter(item => hasPageAccess(item.pageId)).map((item) => (
             <Link 
               key={item.path}
               to={item.path} 
@@ -8857,7 +8935,7 @@ const Navigation = () => {
           {/* Mobile Menu */}
           {isMobileMenuOpen && (
             <div className="pb-3 space-y-1">
-              {navItems.slice(0, 6).map((item) => (
+              {navItems.slice(0, 6).filter(item => hasPageAccess(item.pageId)).map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
@@ -8873,9 +8951,10 @@ const Navigation = () => {
               ))}
               
               {/* Financial Section in Mobile */}
+              {financialItems.some(item => hasPageAccess(item.pageId)) && (
               <div className="border-t border-gray-700 pt-2 mt-2">
                 <p className="px-3 py-1 text-xs text-gray-500 uppercase">Financial</p>
-                {financialItems.map((item) => (
+                {financialItems.filter(item => hasPageAccess(item.pageId)).map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
@@ -8890,11 +8969,13 @@ const Navigation = () => {
                   </Link>
                 ))}
               </div>
+              )}
 
               {/* Expenses Section in Mobile */}
+              {expenseItems.some(item => hasPageAccess(item.pageId)) && (
               <div className="border-t border-gray-700 pt-2 mt-2">
                 <p className="px-3 py-1 text-xs text-gray-500 uppercase">Expenses</p>
-                {expenseItems.map((item) => (
+                {expenseItems.filter(item => hasPageAccess(item.pageId)).map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
@@ -8909,8 +8990,9 @@ const Navigation = () => {
                   </Link>
                 ))}
               </div>
+              )}
               
-              {navItems.slice(6).map((item) => (
+              {navItems.slice(6).filter(item => hasPageAccess(item.pageId)).map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
@@ -15711,21 +15793,20 @@ function AppContent() {
         {/* Main Content */}
         <main className="bg-gray-900">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/calendar" element={<CalendarView />} />
-            <Route path="/restaurant" element={<Restaurant />} />
-            <Route path="/rooms" element={<Rooms />} />
-            <Route path="/guests" element={<Guests />} />
-            <Route path="/bookings" element={<Bookings />} />
-            <Route path="/income-expense" element={<Expenses />} />
-            <Route path="/expenses" element={<ExpenseTracking />} />
-            <Route path="/stocks" element={<StocksManagement />} />
-            <Route path="/restaurant-expenses" element={<RestaurantExpenses />} />
-            <Route path="/commissions" element={<Commissions />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/payroll" element={<Payroll />} />
-            <Route path="/maintenance" element={<Maintenance />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={<PageGuard pageId="dashboard"><Dashboard /></PageGuard>} />
+            <Route path="/calendar" element={<PageGuard pageId="calendar"><CalendarView /></PageGuard>} />
+            <Route path="/restaurant" element={<PageGuard pageId="restaurant"><Restaurant /></PageGuard>} />
+            <Route path="/rooms" element={<PageGuard pageId="rooms"><Rooms /></PageGuard>} />
+            <Route path="/guests" element={<PageGuard pageId="guests"><Guests /></PageGuard>} />
+            <Route path="/bookings" element={<PageGuard pageId="bookings"><Bookings /></PageGuard>} />
+            <Route path="/income-expense" element={<PageGuard pageId="income_expense"><Expenses /></PageGuard>} />
+            <Route path="/expenses" element={<PageGuard pageId="expenses"><ExpenseTracking /></PageGuard>} />
+            <Route path="/stocks" element={<PageGuard pageId="stocks"><StocksManagement /></PageGuard>} />
+            <Route path="/restaurant-expenses" element={<PageGuard pageId="expenses"><RestaurantExpenses /></PageGuard>} />
+            <Route path="/commissions" element={<PageGuard pageId="commissions"><Commissions /></PageGuard>} />
+            <Route path="/payroll" element={<PageGuard pageId="payroll"><Payroll /></PageGuard>} />
+            <Route path="/maintenance" element={<PageGuard pageId="expenses"><Maintenance /></PageGuard>} />
+            <Route path="/settings" element={<PageGuard pageId="settings"><Settings /></PageGuard>} />
           </Routes>
         </main>
       </BrowserRouter>

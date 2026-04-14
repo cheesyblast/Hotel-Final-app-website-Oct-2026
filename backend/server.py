@@ -1821,7 +1821,8 @@ async def login(user_credentials: UserLogin):
             "username": user.get("username"),
             "full_name": user.get("full_name"),
             "role": user.get("role"),
-            "email": user.get("email", "")
+            "email": user.get("email", ""),
+            "page_permissions": user.get("page_permissions", [])
         }
     }
 
@@ -2643,7 +2644,6 @@ async def get_available_pages():
         {"id": "expenses", "name": "Expenses", "description": "Expense management"},
         {"id": "stocks", "name": "Stock Management", "description": "Inventory and stock tracking"},
         {"id": "commissions", "name": "Commissions", "description": "Commission tracking"},
-        {"id": "reports", "name": "Reports", "description": "Financial reports"},
         {"id": "payroll", "name": "Payroll", "description": "Employee payroll management"},
         {"id": "maintenance", "name": "Maintenance", "description": "Room maintenance tracking"},
         {"id": "settings", "name": "Settings", "description": "System settings"}
