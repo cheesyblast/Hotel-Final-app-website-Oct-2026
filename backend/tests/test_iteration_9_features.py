@@ -12,7 +12,7 @@ from datetime import date, timedelta, datetime
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://pantry-pos-hub.preview.emergentagent.com"
+    BASE_URL = "https://hospitality-ops-18.preview.emergentagent.com"
 
 class TestUpcomingBookings:
     """Test that upcoming bookings stay visible regardless of check-in date"""
