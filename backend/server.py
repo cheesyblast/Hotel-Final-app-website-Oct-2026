@@ -1480,18 +1480,6 @@ class SettingsUpdate(BaseModel):
     cash_balance: Optional[float] = None
     bank_balance: Optional[float] = None
 
-class PayrollSettings(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    enable_epf: bool = True
-    epf_employee_rate: float = 8.0  # Employee contribution percentage
-    epf_employer_rate: float = 12.0  # Employer contribution percentage
-    enable_etf: bool = True
-    etf_rate: float = 3.0  # ETF rate percentage
-    tax_enabled: bool = False
-    tax_rate: float = 0.0  # Tax rate percentage
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_by: str = "Admin"
-
 class PayrollSettingsUpdate(BaseModel):
     enable_epf: Optional[bool] = None
     epf_employee_rate: Optional[float] = None
@@ -3126,11 +3114,11 @@ async def get_bookings(
         query["$or"] = [
             {"guest_name": {"$regex": search, "$options": "i"}},
             {"$and": [
-                {"guest_email": {"$exists": True, "$ne": None, "$ne": ""}},
+                {"guest_email": {"$exists": True, "$nin": [None, ""]}},
                 {"guest_email": {"$regex": search, "$options": "i"}}
             ]},
             {"$and": [
-                {"guest_phone": {"$exists": True, "$ne": None, "$ne": ""}},
+                {"guest_phone": {"$exists": True, "$nin": [None, ""]}},
                 {"guest_phone": {"$regex": search, "$options": "i"}}
             ]},
             {"room_number": {"$regex": search, "$options": "i"}}
@@ -5077,15 +5065,6 @@ async def delete_guest_proof(
     return {"message": "ID proof deleted successfully", "bookings_updated": result.modified_count}
 
 # Menu item edit and delete-check endpoints
-class MenuItemUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    category_id: Optional[str] = None
-    is_vegetarian: Optional[bool] = None
-    is_spicy: Optional[bool] = None
-    prep_time: Optional[int] = None
-
 @api_router.put("/restaurant/menu-items/{item_id}")
 async def update_menu_item(
     item_id: str,
@@ -6762,6 +6741,9 @@ async def create_restaurant_expense(
     
     await db.restaurant_expenses.insert_one(expense)
     
+    # Prepare response before _id is added
+    resp_expense = {k: v for k, v in expense.items() if k != '_id'}
+    
     # Also add to general expenses
     await db.expenses.insert_one({
         "id": str(uuid.uuid4()),
@@ -6775,7 +6757,7 @@ async def create_restaurant_expense(
         "created_at": datetime.utcnow()
     })
     
-    return {"message": "Restaurant expense added", "expense": expense}
+    return {"message": "Restaurant expense added", "expense": resp_expense}
 
 # ==================== EMAIL & SMS TEMPLATES ====================
 
@@ -8079,8 +8061,6 @@ async def api_calculate_restaurant_taxes(base_amount: float):
 @api_router.get("/commissions/export")
 async def export_commissions(format: str = "csv", start_date: Optional[str] = None, end_date: Optional[str] = None):
     """Export commission data"""
-    import csv
-    import io
     
     query = {}
     if start_date and end_date:

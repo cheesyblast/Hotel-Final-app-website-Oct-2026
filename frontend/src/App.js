@@ -3,8 +3,6 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import axios from "axios";
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from 'recharts';
 
 // Countries list for dropdown
@@ -5269,66 +5267,6 @@ const Expenses = () => {
       XLSX.utils.book_append_sheet(wb, expWs, 'Expense Details');
     }
     XLSX.writeFile(wb, `Monthly_Sales_Report_${monthlyReportData.month?.replace(' ', '_')}.xlsx`);
-  };
-
-  const downloadDailyPDF = () => {
-    if (!dailyReportData) return;
-    const doc = new jsPDF();
-    const pw = doc.internal.pageSize.getWidth();
-    doc.setFontSize(18);
-    doc.text('Daily Sales Report', pw / 2, 18, { align: 'center' });
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Date: ${dailyReportData.date}`, pw / 2, 26, { align: 'center' });
-    doc.setTextColor(33, 37, 41);
-    doc.autoTable({
-      startY: 34,
-      head: [['Category', 'Amount (LKR)']],
-      body: [
-        ['Cash Received', (dailyReportData.received?.cash || 0).toLocaleString()],
-        ['Bank Received', (dailyReportData.received?.bank || 0).toLocaleString()],
-        ['Total Received', (dailyReportData.received?.total || 0).toLocaleString()],
-        ['Cash Paid', (dailyReportData.paid?.cash || 0).toLocaleString()],
-        ['Bank Paid', (dailyReportData.paid?.bank || 0).toLocaleString()],
-        ['Total Paid', (dailyReportData.paid?.total || 0).toLocaleString()],
-        ['Pending Receivables', (dailyReportData.pending_receivables?.total || 0).toLocaleString()],
-        ['Pending Payables', (dailyReportData.pending_payables?.total || 0).toLocaleString()],
-        ['Net Position', (dailyReportData.net_position || 0).toLocaleString()],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [16, 185, 129] },
-    });
-    doc.save(`Daily_Sales_Report_${dailyReportData.date}.pdf`);
-  };
-
-  const downloadMonthlyPDF = () => {
-    if (!monthlyReportData) return;
-    const doc = new jsPDF('landscape');
-    const pw = doc.internal.pageSize.getWidth();
-    doc.setFontSize(18);
-    doc.text('Monthly Sales Report', pw / 2, 18, { align: 'center' });
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(monthlyReportData.month || '', pw / 2, 26, { align: 'center' });
-    doc.setTextColor(33, 37, 41);
-    
-    const rows = (monthlyReportData.daily_breakdown || []).map(d => [
-      d.date, d.received_cash, d.received_bank, d.total_received,
-      d.paid_cash, d.paid_bank, d.total_paid, d.pending_payables, d.net_balance
-    ]);
-    const gt = monthlyReportData.grand_totals || {};
-    rows.push(['TOTAL', gt.received_cash, gt.received_bank, gt.total_received,
-      gt.paid_cash, gt.paid_bank, gt.total_paid, gt.pending_payables, gt.net_balance]);
-    
-    doc.autoTable({
-      startY: 34,
-      head: [['Date', 'Rcvd Cash', 'Rcvd Bank', 'Total Rcvd', 'Paid Cash', 'Paid Bank', 'Total Paid', 'Pending Pay', 'Net']],
-      body: rows,
-      theme: 'striped',
-      headStyles: { fillColor: [139, 92, 246] },
-      styles: { fontSize: 7 }
-    });
-    doc.save(`Monthly_Sales_Report_${monthlyReportData.month?.replace(' ', '_')}.pdf`);
   };
 
   const getPaginatedData = (data, currentPage) => {
