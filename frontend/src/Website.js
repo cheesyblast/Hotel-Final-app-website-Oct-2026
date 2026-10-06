@@ -23,6 +23,9 @@ const scrollTo = (id) => { const el = document.getElementById(id); if (el) el.sc
 
 /* ──────── BRAND COLORS ──────── */
 // Navy: #1a1464   Red: #e41e2e   White: #ffffff
+// Fonts: Playfair Display (serif headings), DM Sans (body)
+const FONT_SERIF = "'Playfair Display', Georgia, serif";
+const FONT_SANS = "'DM Sans', system-ui, sans-serif";
 
 /* ════════════ NAVBAR ════════════ */
 const Navbar = () => {
@@ -89,7 +92,7 @@ const Hero = ({ onSearch, loading }) => {
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-black/60" />
       <div className="relative z-10 flex flex-col items-center justify-center h-full text-center px-4">
         <p className="text-white/90 tracking-[0.4em] uppercase text-xs sm:text-sm mb-4 font-medium">Boutique Hotel & Restaurant</p>
-        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-serif font-bold text-white leading-tight mb-3">
+        <h1 className="text-4xl sm:text-5xl lg:text-7xl ws-serif font-bold text-white leading-tight mb-3">
           Kreation Hotels Colombo
         </h1>
         <p className="text-white/80 text-lg sm:text-xl mb-10">Where colonial charm meets modern luxury in Colombo</p>
@@ -195,7 +198,7 @@ const BookingModal = ({ show, onClose, checkIn, checkOut }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h3 className="text-lg font-serif font-bold text-[#1a1464]">Book Your Stay</h3>
+            <h3 className="text-lg ws-serif font-bold text-[#1a1464]">Book Your Stay</h3>
             {availability && <p className="text-xs text-gray-500">{checkIn} to {checkOut} &middot; {availability.nights} night{availability.nights > 1 ? "s" : ""}</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
@@ -216,7 +219,7 @@ const BookingModal = ({ show, onClose, checkIn, checkOut }) => {
                 {availability.available_room_types.map((rt, i) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-[#1a1464]/30 transition-colors">
                     <div>
-                      <h4 className="text-[#1a1464] font-serif font-bold">{rt.room_type} Room</h4>
+                      <h4 className="text-[#1a1464] ws-serif font-bold">{rt.room_type} Room</h4>
                       <p className="text-gray-500 text-xs">Up to {rt.max_occupancy} guests &middot; {rt.available_count} room{rt.available_count > 1 ? "s" : ""} left</p>
                     </div>
                     <div className="text-right flex items-center gap-4">
@@ -291,7 +294,7 @@ const BookingModal = ({ show, onClose, checkIn, checkOut }) => {
                 <span className="text-[#1a1464] font-mono text-lg font-bold">{mins}:{secs.toString().padStart(2, "0")}</span>
                 <span className="text-gray-500 text-xs ml-2">to complete payment</span>
               </div>
-              <h4 className="text-[#1a1464] font-serif text-xl mb-4">Booking Summary</h4>
+              <h4 className="text-[#1a1464] ws-serif text-xl mb-4">Booking Summary</h4>
               <div className="max-w-sm mx-auto text-left space-y-2 mb-6">
                 {[["Room", `${holdData.room_type} (#${holdData.room_number})`], ["Check-in", holdData.check_in], ["Check-out", holdData.check_out], ["Nights", holdData.nights]].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm"><span className="text-gray-500">{k}</span><span className="text-gray-800 font-medium">{v}</span></div>
@@ -313,7 +316,7 @@ const BookingModal = ({ show, onClose, checkIn, checkOut }) => {
               <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
               </div>
-              <h4 className="text-[#1a1464] font-serif text-2xl mb-2">Booking Confirmed!</h4>
+              <h4 className="text-[#1a1464] ws-serif text-2xl mb-2">Booking Confirmed!</h4>
               <p className="text-gray-500 mb-6">Confirmation sent via email and SMS.</p>
               <button onClick={onClose} className="border border-[#1a1464] text-[#1a1464] hover:bg-[#1a1464]/5 px-8 py-2 rounded text-sm uppercase tracking-wider transition-colors">Close</button>
             </div>
@@ -330,7 +333,7 @@ const RoomsSection = ({ rooms }) => (
     <div className="max-w-7xl mx-auto px-6">
       <div className="text-center mb-16">
         <p className="text-[#e41e2e] tracking-[0.3em] uppercase text-xs mb-3 font-semibold">Accommodations</p>
-        <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#1a1464]">Our Rooms</h2>
+        <h2 className="text-3xl sm:text-4xl ws-serif font-bold text-[#1a1464]">Our Rooms</h2>
         <div className="w-16 h-0.5 bg-[#e41e2e] mx-auto mt-4" />
       </div>
       {rooms.length === 0 ? <p className="text-center text-gray-400">Loading rooms...</p> : (
@@ -342,7 +345,7 @@ const RoomsSection = ({ rooms }) => (
                 <div className="absolute top-4 right-4 bg-[#e41e2e] text-white text-xs font-bold px-3 py-1 rounded uppercase tracking-wider">{r.total_rooms} Available</div>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-serif text-[#1a1464] font-bold mb-2">{r.room_type} Room</h3>
+                <h3 className="text-xl ws-serif text-[#1a1464] font-bold mb-2">{r.room_type} Room</h3>
                 <p className="text-gray-500 text-sm mb-4">Up to {r.max_occupancy} guests</p>
                 {r.amenities?.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-4">
@@ -377,7 +380,7 @@ const Amenities = () => {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <p className="text-[#e41e2e] tracking-[0.3em] uppercase text-xs mb-3 font-semibold">What We Offer</p>
-          <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#1a1464]">Hotel Amenities</h2>
+          <h2 className="text-3xl sm:text-4xl ws-serif font-bold text-[#1a1464]">Hotel Amenities</h2>
           <div className="w-16 h-0.5 bg-[#e41e2e] mx-auto mt-4" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -401,7 +404,7 @@ const Gallery = () => (
     <div className="max-w-7xl mx-auto px-6">
       <div className="text-center mb-12">
         <p className="text-[#e41e2e] tracking-[0.3em] uppercase text-xs mb-3 font-semibold">Gallery</p>
-        <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#1a1464]">Explore Our Hotel</h2>
+        <h2 className="text-3xl sm:text-4xl ws-serif font-bold text-[#1a1464]">Explore Our Hotel</h2>
         <div className="w-16 h-0.5 bg-[#e41e2e] mx-auto mt-4" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 rounded-xl overflow-hidden">
@@ -422,20 +425,20 @@ const About = () => (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
         <div>
           <p className="text-[#e41e2e] tracking-[0.3em] uppercase text-xs mb-3 font-semibold">Our Story</p>
-          <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#1a1464] mb-6">A Heritage of Hospitality</h2>
+          <h2 className="text-3xl sm:text-4xl ws-serif font-bold text-[#1a1464] mb-6">A Heritage of Hospitality</h2>
           <p className="text-gray-600 leading-relaxed mb-4">Nestled in the prestigious Colombo 03, Kreation Hotels is a charming boutique hotel that seamlessly blends colonial-era architecture with contemporary luxury.</p>
           <p className="text-gray-600 leading-relaxed mb-4">Our beautifully restored heritage building offers an intimate retreat in the heart of the city, complete with a restaurant serving the finest Sri Lankan and international cuisine.</p>
           <p className="text-gray-600 leading-relaxed mb-8">Whether you're visiting for business or leisure, our dedicated team ensures every guest experiences the warmth and elegance that define true Sri Lankan hospitality.</p>
           <div className="grid grid-cols-3 gap-6">
-            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">12+</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rooms</p></div>
-            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">4.5</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rating</p></div>
-            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">24/7</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Service</p></div>
+            <div className="text-center"><p className="text-3xl ws-serif font-bold text-[#e41e2e]">12+</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rooms</p></div>
+            <div className="text-center"><p className="text-3xl ws-serif font-bold text-[#e41e2e]">4.5</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rating</p></div>
+            <div className="text-center"><p className="text-3xl ws-serif font-bold text-[#e41e2e]">24/7</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Service</p></div>
           </div>
         </div>
         <div className="relative">
           <img src={HOTEL_PHOTOS[0]} alt="Kreation Hotels" className="w-full h-[500px] object-cover rounded-xl shadow-lg" />
           <div className="absolute -bottom-6 -left-6 bg-[#1a1464] p-6 rounded-lg hidden lg:block">
-            <p className="text-white font-serif text-2xl font-bold">Colombo 03</p>
+            <p className="text-white ws-serif text-2xl font-bold">Colombo 03</p>
             <p className="text-white/70 text-sm">Sri Lanka</p>
           </div>
         </div>
@@ -483,7 +486,7 @@ const Contact = ({ hotelInfo }) => {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <p className="text-[#e41e2e] tracking-[0.3em] uppercase text-xs mb-3 font-semibold">Get In Touch</p>
-          <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#1a1464]">Contact Us</h2>
+          <h2 className="text-3xl sm:text-4xl ws-serif font-bold text-[#1a1464]">Contact Us</h2>
           <div className="w-16 h-0.5 bg-[#e41e2e] mx-auto mt-4" />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -517,7 +520,7 @@ const Contact = ({ hotelInfo }) => {
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
                 </div>
-                <p className="text-[#1a1464] font-serif text-xl mb-2">Message Sent!</p>
+                <p className="text-[#1a1464] ws-serif text-xl mb-2">Message Sent!</p>
                 <p className="text-gray-500 text-sm">We'll get back to you shortly.</p>
               </div>
             ) : (
@@ -581,7 +584,8 @@ const Website = () => {
   };
 
   return (
-    <div className="bg-white min-h-screen">
+    <div className="bg-white min-h-screen" style={{ fontFamily: FONT_SANS }}>
+      <style>{`.ws-serif { font-family: ${FONT_SERIF} !important; }`}</style>
       <Navbar />
       <Hero onSearch={handleSearch} loading={searchLoading} />
       <RoomsSection rooms={rooms} />
