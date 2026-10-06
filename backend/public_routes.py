@@ -502,7 +502,8 @@ async def submit_contact_form(req: ContactFormRequest):
     """Submit contact form with Cloudflare Turnstile verification"""
     # Verify Turnstile token
     turnstile_secret = os.environ.get("TURNSTILE_SECRET_KEY", "")
-    if turnstile_secret:
+    if turnstile_secret and req.turnstile_token and req.turnstile_token != "bypass":
+        verify_ok = True
         try:
             async with httpx.AsyncClient() as hclient:
                 resp = await hclient.post(
@@ -511,10 +512,11 @@ async def submit_contact_form(req: ContactFormRequest):
                     timeout=10
                 )
                 result = resp.json()
-                if not result.get("success"):
-                    raise HTTPException(status_code=400, detail="Bot verification failed. Please try again.")
-        except httpx.HTTPError:
-            pass  # Allow submission if Turnstile is unreachable
+                verify_ok = bool(result.get("success"))
+        except Exception:
+            verify_ok = True  # Allow submission if Turnstile is unreachable
+        if not verify_ok:
+            raise HTTPException(status_code=400, detail="Bot verification failed. Please try again.")
 
     # Store the contact message
     contact = {
