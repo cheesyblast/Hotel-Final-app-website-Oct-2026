@@ -113,7 +113,7 @@ class TestStockManagement:
         for stock_id in self.test_stock_ids:
             try:
                 self.session.delete(f"{BASE_URL}/api/stocks/{stock_id}")
-            except:
+            except Exception:
                 pass
     
     def test_get_stocks_endpoint(self):
@@ -316,7 +316,7 @@ class TestUserPagePermissions:
         for user_id in self.test_user_ids:
             try:
                 self.session.delete(f"{BASE_URL}/api/users/{user_id}")
-            except:
+            except Exception:
                 pass
     
     def test_available_pages_endpoint(self):

@@ -313,6 +313,10 @@ async def payhere_payment_notify(request: Request):
             print(f"No hold found for order {order_id}")
             return {"status": "hold_not_found"}
 
+        # Idempotency: skip if already confirmed
+        if hold.get("status") == "confirmed":
+            return {"status": "already_confirmed", "booking_id": hold.get("booking_id", "")}
+
         # Create actual booking in the CRM
         booking_id = str(uuid.uuid4())
         booking = {
@@ -477,6 +481,8 @@ async def get_booking_status(order_id: str):
 
     now = datetime.now(timezone.utc)
     expires_at = hold.get("expires_at")
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     if hold.get("status") == "held" and expires_at and now > expires_at:
         await db.booking_holds.update_one({"order_id": order_id}, {"$set": {"status": "expired"}})
         hold["status"] = "expired"

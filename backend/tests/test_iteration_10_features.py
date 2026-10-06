@@ -458,7 +458,7 @@ class TestCleanup:
             try:
                 requests.post(f"{BASE_URL}/api/cancel/{booking['id']}", headers=auth_headers)
                 print(f"  Cancelled test booking: {booking.get('guest_name')}")
-            except:
+            except Exception:
                 pass
         
         print(f"✅ Cleaned up {len(test_bookings)} test bookings")

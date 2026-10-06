@@ -1,0 +1,44 @@
+{
+  "summary": "Tested new public hotel website (frontend) + public_routes.py backend endpoints. 11/11 backend tests pass. Full booking flow (search → results → guest details → payment summary with 5-min countdown timer) works end-to-end. Website redirects / → /website, CRM login still works at /dashboard. Fixed one tz-naive vs tz-aware datetime bug in get_booking_status.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/public/booking/status/{order_id}", "issue": "Was returning 500 due to comparing naive datetime from Mongo with timezone-aware datetime.now(timezone.utc). Fixed by normalizing expires_at to UTC-aware before comparison in public_routes.py line ~479."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Website booking section", "issues": ["Room card has a 'BOOK NOW' button at top-right of each result card (data-testid absent) and a 'Select' button at right. Two near-identical actions could be confusing. Consider consolidating OR add data-testid='select-room-btn' on the Select button for better testability."]},
+      {"screen": "Contact form", "issues": ["Cloudflare Turnstile shows 'Unable to connect to website' on the preview domain (expected per task note). Contact submit still works when secret missing or network error (bypass in code)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_public_website.py",
+    "/app/test_reports/pytest/public_website.xml"
+  ],
+  "action_items": [
+    "Review the datetime timezone fix in public_routes.py get_booking_status (normalize expires_at tzinfo). Consider applying same pattern defensively in any future code that reads datetimes back from Mongo.",
+    "Optional: add data-testid='select-room-btn' to Website.js step-2 room cards for easier automated testing.",
+    "No further action required to ship the website MVP; PayHere sandbox credentials still placeholder per task note."
+  ],
+  "critical_code_review_comments": [
+    "public_routes.py line 234-235: check_in/check_out are stored as naive datetimes (strptime), while expires_at is tz-aware. Mongo stores both; on retrieval both are naive. The server-side filter {expires_at: $gt: now} works because Mongo normalizes to UTC, but Python-side comparisons must be careful. Applied fix in get_booking_status; consider doing same in cleanup_expired_holds / get_held_rooms_for_dates (currently fine because comparisons happen in Mongo).",
+    "public_routes.py line 282: `'sandbox' in os.environ.get('PAYHERE_BASE_URL', 'sandbox')` evaluates sandbox flag against the URL string; works but a dedicated PAYHERE_SANDBOX bool env var would be cleaner.",
+    "public_routes.py payhere/notify endpoint has no idempotency guard – if PayHere retries notifications, duplicate bookings/customers could be created. Suggest checking existing booking by order_id/payment_id before insert.",
+    "Website.js booking engine lacks 'nights < 1' client-side validation beyond date auto-fix. Backend handles it but UX could show inline error.",
+    "No HTTP 429/rate-limit protection on public endpoints (contact / availability / hold). Potential abuse surface."
+  ],
+  "updated_files": [
+    "/app/backend/public_routes.py (tz-aware fix for expires_at comparison in get_booking_status)",
+    "/app/backend/tests/test_public_website.py (new test file, 11 tests)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / admin123 (CRM login) – verified working",
+  "seed_data_creation": "No new seed data. Created ephemeral booking_holds during tests, cleaned up afterwards.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public website at /website working: hero slider, rooms, booking engine (search→select→guest details→payment summary with 5-min countdown), contact form (Turnstile shows 'unable to connect' on preview). Public API endpoints all pass (/api/public/hotel-info, /rooms, /availability, /booking/hold, /booking/status/{order_id}, /contact, /payhere/notify). PayHere is sandbox with placeholder creds. CRM Dashboard at /dashboard still fully functional post-restructure. If retesting the payhere/notify callback, note it is not callable from browser (server-side only) and lacks idempotency guard.",
+  "rca of the issue": "Bug: GET /api/public/booking/status/{order_id} returned 500 with TypeError 'can't compare offset-naive and offset-aware datetimes'. Reproduction: POST /api/public/booking/hold then GET /api/public/booking/status/{returned_order_id}. Root cause: hold_record.expires_at written as timezone-aware (datetime.now(timezone.utc) + timedelta), but MongoDB BSON strips tzinfo on round-trip, so the retrieved value is naive. Line 480 did `now > expires_at` with aware now vs naive expires_at. Mitigation: Normalize expires_at by applying .replace(tzinfo=timezone.utc) before comparison. Alternative long-term: enforce consistent tz handling across all datetime fields when writing/reading from Mongo."
+}

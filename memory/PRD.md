@@ -1,65 +1,60 @@
 # Hotel Management System - PRD
 
 ## Original Problem Statement
-Full-stack hotel management system with FastAPI backend + React frontend + MongoDB. Features include booking management, restaurant POS, stock management, payroll, income/expense tracking, calendar view, role-based access, and channel management.
+Full-stack hotel management system (CRM) + Public hotel website with online booking engine. CRM for internal management, Website for guest-facing reservations. Both share the same database but are architecturally separate.
 
 ## Architecture
-- **Backend**: FastAPI (single server.py ~8.1k lines)
-- **Frontend**: React (single App.js ~14.9k lines)
-- **Database**: MongoDB
-- **Auth**: JWT-based with 8hr token expiry
+- **Backend**: FastAPI (server.py ~8.1k lines + public_routes.py for website APIs)
+- **Frontend**: React (App.js CRM ~15k lines + Website.js public site ~700 lines)
+- **Database**: MongoDB (shared between CRM and Website)
+- **Auth**: JWT-based for CRM; Public APIs for website (no auth)
+- **Routing**: `/website` → Public hotel website, `/dashboard` → CRM (auth required)
 
 ## What's Been Implemented
 
-### Core Features (Completed)
-- Authentication with JWT + Axios interceptor
-- Dashboard with statistics, upcoming bookings (paginated 10/page), checked-in guests
-- Room management (CRUD, status tracking)
-- Booking management with searchable country dropdown
-- Guest management with ID proof upload/download/delete (PDF)
-- Restaurant POS with menu, orders, payment processing
-- Calendar view with room occupancy details
-- Financial tracking (income/expense with dynamic categories)
-- Stock management system
-- Payroll with employee management
-- Role-based access control (RBAC) with page-level permissions
-- Settings page with channel management
+### CRM Features (Complete)
+- Authentication, Dashboard, Room/Booking/Guest Management
+- Restaurant POS, Stock Management, Payroll
+- Income/Expense tracking with dynamic categories, vendor management
+- Calendar view, Financial reports (daily/monthly), Role-based access
+- Channel management, PDF ID proof uploads, 5-min room hold mechanism
 
-### Session 1 Changes (Feb 2026)
-1-18: Booking channel auto-rate, advance payments, dynamic categories, PDF uploads, guest details fixes, menu item actions, mobile nav, room changes, payroll fix, dark theme fixes, etc.
+### Public Hotel Website (NEW - Oct 2026)
+1. **One-Page Design**: Hero slider, Rooms, Booking Engine, Amenities, Gallery, About, Contact, Footer
+2. **Real-Time Booking Engine**: Checks CRM room availability → Guest details → PayHere payment
+3. **5-Minute Room Hold**: Concurrent booking protection with countdown timer
+4. **PayHere Payment Gateway**: Sandbox mode integrated, hash generation, server notification webhook
+5. **Payment Options**: Full payment (100%) or Advance (30% minimum)
+6. **Cloudflare Turnstile**: Bot protection on contact form (Site Key configured)
+7. **SMS/Email Confirmations**: Uses CRM settings (notify.lk + Brevo) on booking confirmation
+8. **Idempotency Guard**: PayHere notification handler prevents duplicate bookings on retries
 
-### Session 2 Changes (Apr 2026) - Financial Enhancement
-19-27: Vendor management, "Add to Account" payment, mark expense as paid, enhanced daily/monthly sales reports with receivables/payables, modern dashboard with charts, Excel downloads.
+## Key Public API Endpoints
+- `GET /api/public/hotel-info` - Hotel details for website
+- `GET /api/public/rooms` - Room types grouped with prices
+- `GET /api/public/availability?check_in=&check_out=` - Real-time availability
+- `POST /api/public/booking/hold` - Hold room for 5 minutes
+- `GET /api/public/booking/status/{order_id}` - Check hold/booking status
+- `POST /api/public/payhere/notify` - PayHere payment callback
+- `POST /api/public/contact` - Contact form (Turnstile-verified)
 
-### Session 3 Changes (Apr 2026) - Permissions & Cleanup
-28. **Permission Bug Fix**: Login API now returns page_permissions. Navigation filters links via hasPageAccess(). All routes wrapped with PageGuard component that shows "Access Denied" for unauthorized pages. Admin always has full access.
-29. **Reports Page Removed**: Route, component, and nav links all removed. All financial data available in Inc & Exp page.
-30. **PDF Downloads Removed**: Only Excel downloads remain on Daily/Monthly Sales tabs.
-31. **Enhanced Daily Sales Excel**: Individual record details under each section (CASH RECEIVED lists Room number, guest name, amount; same for BANK RECEIVED, CASH PAID, BANK PAID, PENDING RECEIVABLES, PENDING PAYABLES).
-32. **Dead Code Cleanup**: Removed unused Reports component (~750 lines) and jsPDF imports.
+## Environment Variables
+### Backend (.env)
+- PAYHERE_MERCHANT_ID, PAYHERE_MERCHANT_SECRET (sandbox placeholders)
+- PAYHERE_BASE_URL (https://sandbox.payhere.lk)
+- TURNSTILE_SECRET_KEY
 
-## Key API Endpoints
-- POST /api/auth/login (returns page_permissions), GET /api/auth/me
-- CRUD /api/bookings, GET /api/bookings/upcoming
-- POST /api/checkin (with new_room_number support)
-- CRUD /api/rooms, GET /api/guests
-- CRUD /api/restaurant/menu-items, /api/restaurant/orders
-- CRUD /api/stock-items, /api/payroll/employees
-- GET/POST /api/categories/{type}
-- GET /api/daily-financial-summary (includes pending_receivables, pending_payables)
-- GET /api/financial-reports/daily?date=YYYY-MM-DD
-- GET /api/financial-reports/monthly?year=YYYY&month=MM (day-by-day breakdown)
-- GET /api/vendors?search=xxx, POST /api/vendors
-- PUT /api/expenses/{id}/mark-paid
-- GET /api/users/available-pages (13 pages, no 'reports')
-- CRUD /api/users (with page_permissions)
+### Frontend (.env)
+- REACT_APP_TURNSTILE_SITE_KEY
+- REACT_APP_PAYHERE_BASE_URL
 
 ## Credentials
-- Admin: admin / admin123
+- CRM Admin: admin / admin123
 
 ## Pending/Upcoming Tasks
-- P1: Channel Manager real-time sync (placeholder currently)
+- P0: Configure real PayHere merchant ID and secret (user in process)
+- P1: Channel Manager real-time sync
 - P2: Guest feedback system
 - P2: Notification logs viewer
 - P2: Guest checkout receipt PDF
-- P3: Refactor monolithic App.js (~14.9k lines) and server.py (~8.1k lines)
+- P3: Refactor monolithic App.js and server.py
