@@ -8122,6 +8122,10 @@ async def root():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Include public website routes
+from public_routes import public_router
+app.include_router(public_router, prefix="/api")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

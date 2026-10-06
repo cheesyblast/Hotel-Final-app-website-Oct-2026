@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react
 import axios from "axios";
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from 'recharts';
+import Website from "./Website";
 
 // Countries list for dropdown
 const COUNTRIES = [
@@ -7963,7 +7964,7 @@ const Navigation = () => {
   };
 
   const navItems = [
-    { path: '/', label: 'Dashboard', pageId: 'dashboard' },
+    { path: '/dashboard', label: 'Dashboard', pageId: 'dashboard' },
     { path: '/calendar', label: 'Calendar', pageId: 'calendar' },
     { path: '/restaurant', label: 'Restaurant', pageId: 'restaurant' },
     { path: '/rooms', label: 'Rooms', pageId: 'rooms' },
@@ -14950,7 +14951,6 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <BrowserRouter>
         {/* Header */}
         <header className="bg-gray-800 shadow-sm border-b border-gray-700">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -14980,7 +14980,7 @@ function AppContent() {
         {/* Main Content */}
         <main className="bg-gray-900">
           <Routes>
-            <Route path="/" element={<PageGuard pageId="dashboard"><Dashboard /></PageGuard>} />
+            <Route path="/dashboard" element={<PageGuard pageId="dashboard"><Dashboard /></PageGuard>} />
             <Route path="/calendar" element={<PageGuard pageId="calendar"><CalendarView /></PageGuard>} />
             <Route path="/restaurant" element={<PageGuard pageId="restaurant"><Restaurant /></PageGuard>} />
             <Route path="/rooms" element={<PageGuard pageId="rooms"><Rooms /></PageGuard>} />
@@ -14996,7 +14996,6 @@ function AppContent() {
             <Route path="/settings" element={<PageGuard pageId="settings"><Settings /></PageGuard>} />
           </Routes>
         </main>
-      </BrowserRouter>
     </div>
   );
 }
@@ -15004,13 +15003,23 @@ function AppContent() {
 // Main App Component with Authentication
 function App() {
   return (
-    <FinancialProvider>
-      <AuthProvider>
-        <ProtectedRoute>
-          <AppContent />
-        </ProtectedRoute>
-      </AuthProvider>
-    </FinancialProvider>
+    <BrowserRouter>
+      <Routes>
+        {/* Public website - no auth required */}
+        <Route path="/website" element={<Website />} />
+        <Route path="/" element={<Navigate to="/website" replace />} />
+        {/* CRM - auth required */}
+        <Route path="/*" element={
+          <FinancialProvider>
+            <AuthProvider>
+              <ProtectedRoute>
+                <AppContent />
+              </ProtectedRoute>
+            </AuthProvider>
+          </FinancialProvider>
+        } />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
