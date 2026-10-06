@@ -7,7 +7,7 @@ const TURNSTILE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY;
 const PAYHERE_BASE = process.env.REACT_APP_PAYHERE_BASE_URL || "https://sandbox.payhere.lk";
 
 const LOGO_URL = "https://customer-assets-jt897jd0.emergentagent.net/job_18d8770a-5028-4f62-923e-76f48cfb8c3c/artifacts/8k851qew_kreation_hotel_logo-removebg%20%281%29.webp";
-const MAP_IMAGE = "https://static.prod-images.emergentagent.com/jobs/18d8770a-5028-4f62-923e-76f48cfb8c3c/images/c8e5334b7634ba55fe31ee518753cbb96b38a4c07658925fc13cba9b2e88dca8.jpeg";
+const MAP_IMAGE = "https://customer-assets-jt897jd0.emergentagent.net/job_18d8770a-5028-4f62-923e-76f48cfb8c3c/artifacts/ywybvxdf_image.webp";
 const MAP_LINK = "https://maps.app.goo.gl/M9jm9cKRp9hXh77f9";
 
 const HOTEL_PHOTOS = [
@@ -90,7 +90,7 @@ const Hero = ({ onSearch, loading }) => {
       <div className="relative z-10 flex flex-col items-center justify-center h-full text-center px-4">
         <p className="text-white/90 tracking-[0.4em] uppercase text-xs sm:text-sm mb-4 font-medium">Boutique Hotel & Restaurant</p>
         <h1 className="text-4xl sm:text-5xl lg:text-7xl font-serif font-bold text-white leading-tight mb-3">
-          Kreation Hotels
+          Kreation Hotels Colombo
         </h1>
         <p className="text-white/80 text-lg sm:text-xl mb-10">Where colonial charm meets modern luxury in Colombo</p>
 
@@ -427,8 +427,8 @@ const About = () => (
           <p className="text-gray-600 leading-relaxed mb-4">Our beautifully restored heritage building offers an intimate retreat in the heart of the city, complete with a restaurant serving the finest Sri Lankan and international cuisine.</p>
           <p className="text-gray-600 leading-relaxed mb-8">Whether you're visiting for business or leisure, our dedicated team ensures every guest experiences the warmth and elegance that define true Sri Lankan hospitality.</p>
           <div className="grid grid-cols-3 gap-6">
-            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">10+</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rooms</p></div>
-            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">4.8</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rating</p></div>
+            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">12+</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rooms</p></div>
+            <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">4.5</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Rating</p></div>
             <div className="text-center"><p className="text-3xl font-serif font-bold text-[#e41e2e]">24/7</p><p className="text-gray-500 text-xs uppercase tracking-wider mt-1">Service</p></div>
           </div>
         </div>
