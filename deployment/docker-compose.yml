@@ -1,0 +1,111 @@
+# ==============================================
+#  Docker Compose — Kreation Hotels Full Stack
+#  CRM + Website + MongoDB + Nginx
+# ==============================================
+
+services:
+
+  # ── MongoDB (shared) ──
+  mongo:
+    image: mongo:7
+    container_name: kreation-mongo
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: mongosh --eval "db.adminCommand('ping')" --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── CRM Backend ──
+  crm-backend:
+    build:
+      context: ./crm
+      dockerfile: Dockerfile
+      target: backend
+    container_name: kreation-crm-backend
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=${CRM_DB_NAME:-kreation_db}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CRM_DOMAIN:-https://app.kreationhotels.com}
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  # ── CRM Frontend ──
+  crm-frontend:
+    build:
+      context: ./crm
+      dockerfile: Dockerfile
+      target: frontend
+      args:
+        - REACT_APP_BACKEND_URL=${CRM_DOMAIN:-https://app.kreationhotels.com}
+    container_name: kreation-crm-frontend
+    restart: always
+
+  # ── Website Backend ──
+  website-backend:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+      target: backend
+    container_name: kreation-website-backend
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=${CRM_DB_NAME:-kreation_db}
+      - PAYHERE_MERCHANT_ID=${PAYHERE_MERCHANT_ID}
+      - PAYHERE_MERCHANT_SECRET=${PAYHERE_MERCHANT_SECRET}
+      - PAYHERE_BASE_URL=${PAYHERE_BASE_URL:-https://sandbox.payhere.lk}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
+      - CORS_ORIGINS=${WEBSITE_DOMAIN:-https://www.kreationhotels.com}
+    ports:
+      - "127.0.0.1:8002:8002"
+
+  # ── Website Frontend ──
+  website-frontend:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+      target: frontend
+      args:
+        - REACT_APP_BACKEND_URL=${WEBSITE_DOMAIN:-https://www.kreationhotels.com}
+        - REACT_APP_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}
+        - REACT_APP_PAYHERE_BASE_URL=${PAYHERE_BASE_URL:-https://sandbox.payhere.lk}
+    container_name: kreation-website-frontend
+    restart: always
+
+  # ── Nginx Reverse Proxy ──
+  nginx:
+    image: nginx:alpine
+    container_name: kreation-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/crm.conf:/etc/nginx/conf.d/crm.conf:ro
+      - ./nginx/website.conf:/etc/nginx/conf.d/website.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl
+      - certbot_data:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    depends_on:
+      - crm-backend
+      - crm-frontend
+      - website-backend
+      - website-frontend
+
+volumes:
+  mongo_data:
+  certbot_data:
+  certbot_certs:
